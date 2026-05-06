@@ -1,20 +1,81 @@
 from kadmon.providers.base import LLMProvider, Message
 from kadmon.tools.base import ToolRegistry
 from kadmon.agent.context import ContextManager
-from kadmon.agent.prompts import SYSTEM_PROMPT
+from kadmon.agent.prompts import SYSTEM_PROMPT, ARCHITECT_PROMPT, EDITOR_PROMPT
 from kadmon.agent.recovery import LoopDetector
+from kadmon.tools.plan import PlanTool
+
+
+# Tools available in each mode
+ARCHITECT_TOOLS = {'read_file', 'list_dir', 'grep_search', 'file_skeleton', 'find_references',
+                   'find_definition', 'plan', 'shell'}
+EDITOR_TOOLS = {'read_file', 'edit_file', 'write_file', 'shell', 'submit', 'plan'}
 
 
 class AgentLoop:
-    def __init__(self, provider: LLMProvider, tools: ToolRegistry, max_iterations: int = 50):
+    def __init__(
+        self,
+        provider: LLMProvider,
+        tools: ToolRegistry,
+        max_iterations: int = 50,
+        use_planning: bool = True,
+    ):
         self.provider = provider
         self.tools = tools
         self.max_iterations = max_iterations
+        self.use_planning = use_planning
         self.context = ContextManager()
         self.loop_detector = LoopDetector()
+        # Register plan tool
+        self._plan_tool = PlanTool()
+        self.tools.register(self._plan_tool)
 
     def run(self, task: str) -> str:
         """Run the agent loop. Returns the final patch or empty string."""
+        if self.use_planning:
+            return self._run_with_planning(task)
+        return self._run_simple(task)
+
+    def _run_with_planning(self, task: str) -> str:
+        """Two-phase: architect explores and plans, editor executes."""
+        # Phase 1: Architect
+        self.context.add(Message(role='user', content=task))
+        architect_budget = self.max_iterations // 3  # ~1/3 budget for planning
+
+        for _ in range(architect_budget):
+            response = self.provider.complete(
+                messages=self.context.to_messages(),
+                tools=self._filtered_tools(ARCHITECT_TOOLS),
+                system=ARCHITECT_PROMPT,
+            )
+            done = self._process_response(response)
+            if done:
+                return done
+            # If plan was created, switch to editor phase
+            if self._plan_tool.plan and self._plan_tool.plan.steps:
+                break
+
+        # Phase 2: Editor (uses remaining budget)
+        editor_budget = self.max_iterations - architect_budget
+        # Inject plan context
+        if self._plan_tool.plan:
+            plan_msg = f"Plan created. Now execute it step by step:\n\n{self._plan_tool.plan.to_prompt()}"
+            self.context.add(Message(role='user', content=plan_msg))
+
+        for _ in range(editor_budget):
+            response = self.provider.complete(
+                messages=self.context.to_messages(),
+                tools=self._filtered_tools(EDITOR_TOOLS),
+                system=EDITOR_PROMPT,
+            )
+            done = self._process_response(response)
+            if done:
+                return done
+
+        return ''
+
+    def _run_simple(self, task: str) -> str:
+        """Simple ReAct loop without planning (for benchmarks or simple tasks)."""
         self.context.add(Message(role='user', content=task))
 
         for _ in range(self.max_iterations):
@@ -23,46 +84,59 @@ class AgentLoop:
                 tools=self.tools.definitions(),
                 system=SYSTEM_PROMPT,
             )
-
-            if not response.tool_calls:
-                self.context.add(Message(role='assistant', content=response.content))
-                continue
-
-            # Build assistant content blocks (text + tool_use)
-            assistant_content: list[dict] = []
-            if response.content:
-                assistant_content.append({'type': 'text', 'text': response.content})
-            for tc in response.tool_calls:
-                assistant_content.append({
-                    'type': 'tool_use', 'id': tc.id, 'name': tc.name, 'input': tc.arguments,
-                })
-            self.context.add(Message(role='assistant', content=assistant_content))
-
-            # Execute tools and build result blocks
-            tool_results: list[dict] = []
-            loop_detected = False
-            for tc in response.tool_calls:
-                result = self.tools.execute(tc.name, **tc.arguments)
-
-                if tc.name == 'submit' and not result.error:
-                    return result.output
-
-                if self.loop_detector.record_action(tc.name, tc.arguments):
-                    loop_detected = True
-                if result.error and self.loop_detector.record_error(result.output):
-                    loop_detected = True
-
-                tool_results.append({
-                    'type': 'tool_result',
-                    'tool_use_id': tc.id,
-                    'content': result.output,
-                    **(({'is_error': True}) if result.error else {}),
-                })
-
-            self.context.add(Message(role='user', content=tool_results))
-
-            if loop_detected:
-                self.context.add(Message(role='user', content=self.loop_detector.get_recovery_message()))
-                self.loop_detector.reset()
+            done = self._process_response(response)
+            if done:
+                return done
 
         return ''
+
+    def _process_response(self, response) -> str | None:
+        """Process an LLM response. Returns patch string if submit called, else None."""
+        if not response.tool_calls:
+            self.context.add(Message(role='assistant', content=response.content))
+            return None
+
+        # Build assistant content blocks
+        assistant_content: list[dict] = []
+        if response.content:
+            assistant_content.append({'type': 'text', 'text': response.content})
+        for tc in response.tool_calls:
+            assistant_content.append({
+                'type': 'tool_use', 'id': tc.id, 'name': tc.name, 'input': tc.arguments,
+            })
+        self.context.add(Message(role='assistant', content=assistant_content))
+
+        # Execute tools
+        tool_results: list[dict] = []
+        loop_detected = False
+        for tc in response.tool_calls:
+            result = self.tools.execute(tc.name, **tc.arguments)
+
+            if tc.name == 'submit' and not result.error:
+                return result.output
+
+            if self.loop_detector.record_action(tc.name, tc.arguments):
+                loop_detected = True
+            if result.error and self.loop_detector.record_error(result.output):
+                loop_detected = True
+
+            tool_results.append({
+                'type': 'tool_result',
+                'tool_use_id': tc.id,
+                'content': result.output,
+                **(({'is_error': True}) if result.error else {}),
+            })
+
+        self.context.add(Message(role='user', content=tool_results))
+
+        if loop_detected:
+            self.context.add(
+                Message(role='user', content=self.loop_detector.get_recovery_message())
+            )
+            self.loop_detector.reset()
+
+        return None
+
+    def _filtered_tools(self, allowed: set[str]) -> list[dict]:
+        """Return tool definitions filtered to the allowed set."""
+        return [t for t in self.tools.definitions() if t['name'] in allowed]
