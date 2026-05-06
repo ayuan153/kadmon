@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 from pathlib import Path
 
+from kadmon.memory.read_cache import ReadCache
 from kadmon.tools.base import Tool, ToolResult
 
 
@@ -24,8 +27,9 @@ class ReadFileTool(Tool):
         'required': ['path'],
     }
 
-    def __init__(self, repo_root: str):
+    def __init__(self, repo_root: str, read_cache: ReadCache | None = None):
         self._root = Path(repo_root).resolve()
+        self._cache = read_cache
 
     def execute(self, **kwargs) -> ToolResult:
         path = kwargs['path']
@@ -44,8 +48,15 @@ class ReadFileTool(Tool):
                     suggestions = f'\nFiles in {parent.relative_to(self._root)}/: {", ".join(sorted(files)[:10])}'
             return ToolResult(output=f'File not found: {path}{suggestions}', error=True)
 
-        content = resolved.read_text()
+        raw = resolved.read_bytes()
+        content = raw.decode()
         lines = content.splitlines()
+
+        # Only dedup full-file reads
+        is_full_read = 'start_line' not in kwargs and 'end_line' not in kwargs
+        if is_full_read and self._cache and self._cache.check(path, raw):
+            size = len(raw)
+            return ToolResult(output=f'[File unchanged since last read: {path} ({size} bytes, {len(lines)} lines)]')
 
         start = kwargs.get('start_line', 1)
         end = kwargs.get('end_line', len(lines))
@@ -68,8 +79,9 @@ class WriteFileTool(Tool):
         'required': ['path', 'content'],
     }
 
-    def __init__(self, repo_root: str):
+    def __init__(self, repo_root: str, read_cache: ReadCache | None = None):
         self._root = Path(repo_root).resolve()
+        self._cache = read_cache
 
     def execute(self, **kwargs) -> ToolResult:
         path = kwargs['path']
@@ -81,6 +93,8 @@ class WriteFileTool(Tool):
 
         resolved.parent.mkdir(parents=True, exist_ok=True)
         resolved.write_text(content)
+        if self._cache:
+            self._cache.invalidate(path)
         return ToolResult(output=f'Wrote {len(content)} bytes to {path}')
 
 
@@ -97,8 +111,9 @@ class EditFileTool(Tool):
         'required': ['path', 'old_str', 'new_str'],
     }
 
-    def __init__(self, repo_root: str):
+    def __init__(self, repo_root: str, read_cache: ReadCache | None = None):
         self._root = Path(repo_root).resolve()
+        self._cache = read_cache
 
     def execute(self, **kwargs) -> ToolResult:
         path = kwargs['path']
@@ -129,6 +144,8 @@ class EditFileTool(Tool):
 
         new_content = content.replace(old_str, new_str, 1)
         resolved.write_text(new_content)
+        if self._cache:
+            self._cache.invalidate(path)
         return ToolResult(output=f'Applied edit to {path}')
 
 
