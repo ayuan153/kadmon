@@ -15,7 +15,7 @@ def main():
 def run(task: str, repo: str, model: str):
     """Run kadmon on a task."""
     from kadmon.providers.anthropic import AnthropicProvider
-    from kadmon.tools import create_default_registry
+    from kadmon.tools import build_index, create_default_registry
     from kadmon.agent import AgentLoop
 
     api_key = os.environ.get('ANTHROPIC_API_KEY', '')
@@ -23,10 +23,13 @@ def run(task: str, repo: str, model: str):
         click.echo('Error: ANTHROPIC_API_KEY not set', err=True)
         raise SystemExit(1)
 
+    repo_path = os.path.abspath(repo)
     provider = AnthropicProvider(model=model, api_key=api_key)
-    tools = create_default_registry(os.path.abspath(repo))
+    db = build_index(repo_path)
+    tools = create_default_registry(repo_path, db=db)
     agent = AgentLoop(provider=provider, tools=tools)
     result = agent.run(task)
+    db.close()
     if result:
         click.echo(result)
     else:
