@@ -2,6 +2,7 @@ from kadmon.providers.base import LLMProvider, Message
 from kadmon.tools.base import ToolRegistry
 from kadmon.agent.context import ContextManager
 from kadmon.agent.prompts import SYSTEM_PROMPT
+from kadmon.agent.recovery import LoopDetector
 
 
 class AgentLoop:
@@ -10,6 +11,7 @@ class AgentLoop:
         self.tools = tools
         self.max_iterations = max_iterations
         self.context = ContextManager()
+        self.loop_detector = LoopDetector()
 
     def run(self, task: str) -> str:
         """Run the agent loop. Returns the final patch or empty string."""
@@ -38,11 +40,17 @@ class AgentLoop:
 
             # Execute tools and build result blocks
             tool_results: list[dict] = []
+            loop_detected = False
             for tc in response.tool_calls:
                 result = self.tools.execute(tc.name, **tc.arguments)
 
                 if tc.name == 'submit' and not result.error:
                     return result.output
+
+                if self.loop_detector.record_action(tc.name, tc.arguments):
+                    loop_detected = True
+                if result.error and self.loop_detector.record_error(result.output):
+                    loop_detected = True
 
                 tool_results.append({
                     'type': 'tool_result',
@@ -52,5 +60,9 @@ class AgentLoop:
                 })
 
             self.context.add(Message(role='user', content=tool_results))
+
+            if loop_detected:
+                self.context.add(Message(role='user', content=self.loop_detector.get_recovery_message()))
+                self.loop_detector.reset()
 
         return ''
