@@ -11,6 +11,28 @@ from pathlib import Path
 import click
 
 
+class _LiveStatus:
+    """Prints a single updating line with a running timer."""
+
+    def __init__(self, prefix: str):
+        self.prefix = prefix
+        self.start = time.time()
+        self._last_len = 0
+
+    def update(self, msg: str):
+        elapsed = time.time() - self.start
+        line = f"\r{self.prefix} [{elapsed:.0f}s] {msg}"
+        # Pad to overwrite previous longer line
+        padding = max(0, self._last_len - len(line))
+        click.echo(line + " " * padding, nl=False)
+        self._last_len = len(line)
+
+    def finish(self, msg: str, duration: float):
+        line = f"\r{self.prefix} [{duration:.1f}s] {msg}"
+        padding = max(0, self._last_len - len(line))
+        click.echo(line + " " * padding)
+
+
 EXERCISM_REPOS = {
     "python": "https://github.com/exercism/python.git",
     "javascript": "https://github.com/exercism/javascript.git",
@@ -128,17 +150,19 @@ class PolyglotRunner:
         summary = BenchmarkSummary(total=len(exercises))
 
         for i, (lang, ex_path) in enumerate(exercises, 1):
-            click.echo(f"  [{i}/{len(exercises)}] {lang}/{ex_path.name}...", nl=False)
-            result = self._run_exercise(lang, ex_path)
-            # Print result inline
+            prefix = f"  [{i}/{len(exercises)}] {lang}/{ex_path.name}"
+            status = _LiveStatus(prefix)
+            status.update("running...")
+            result = self._run_exercise(lang, ex_path, status)
+            # Print final result
             if result.passed_try1:
-                click.echo(f" ✓ pass (try 1, {result.duration:.1f}s)")
+                status.finish("✓ pass (try 1)", result.duration)
             elif result.passed_try2:
-                click.echo(f" ✓ pass (try 2, {result.duration:.1f}s)")
+                status.finish("✓ pass (try 2)", result.duration)
             elif result.error:
-                click.echo(f" ✗ error: {result.error[:60]}")
+                status.finish(f"✗ error: {result.error[:50]}", result.duration)
             else:
-                click.echo(f" ✗ fail ({result.duration:.1f}s)")
+                status.finish("✗ fail", result.duration)
 
             summary.results.append(result)
             if result.passed_try1:
@@ -183,13 +207,14 @@ class PolyglotRunner:
 
         return summary
 
-    def _run_exercise(self, lang: str, ex_path: Path) -> ExerciseResult:
+    def _run_exercise(self, lang: str, ex_path: Path, status: "_LiveStatus") -> ExerciseResult:
         """Run a single exercise with up to max_attempts tries."""
         name = ex_path.name
         start = time.time()
 
         try:
             # Create working copy
+            status.update("setup...")
             work_dir = self._setup_work_dir(lang, ex_path)
             solution_files = self._find_solution_files(lang, work_dir)
 
@@ -200,7 +225,9 @@ class PolyglotRunner:
             prompt = self._build_prompt(ex_path, solution_files)
 
             # Attempt 1: run kadmon with instructions
+            status.update("try 1: agent running...")
             self._run_kadmon(work_dir, prompt)
+            status.update("try 1: running tests...")
             passed = self._run_tests(lang, work_dir)
 
             if passed:
@@ -215,7 +242,9 @@ class PolyglotRunner:
             if self.max_attempts >= 2:
                 error_output = self._get_test_error(lang, work_dir)
                 retry_prompt = self._build_retry_prompt(error_output, solution_files)
+                status.update("try 2: agent running...")
                 self._run_kadmon(work_dir, retry_prompt)
+                status.update("try 2: running tests...")
                 passed = self._run_tests(lang, work_dir)
 
                 if passed:
