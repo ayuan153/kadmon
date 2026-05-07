@@ -8,6 +8,8 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import click
+
 
 EXERCISM_REPOS = {
     "python": "https://github.com/exercism/python.git",
@@ -125,8 +127,19 @@ class PolyglotRunner:
 
         summary = BenchmarkSummary(total=len(exercises))
 
-        for lang, ex_path in exercises:
+        for i, (lang, ex_path) in enumerate(exercises, 1):
+            click.echo(f"  [{i}/{len(exercises)}] {lang}/{ex_path.name}...", nl=False)
             result = self._run_exercise(lang, ex_path)
+            # Print result inline
+            if result.passed_try1:
+                click.echo(f" ✓ pass (try 1, {result.duration:.1f}s)")
+            elif result.passed_try2:
+                click.echo(f" ✓ pass (try 2, {result.duration:.1f}s)")
+            elif result.error:
+                click.echo(f" ✗ error: {result.error[:60]}")
+            else:
+                click.echo(f" ✗ fail ({result.duration:.1f}s)")
+
             summary.results.append(result)
             if result.passed_try1:
                 summary.passed_try1 += 1
