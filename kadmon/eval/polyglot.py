@@ -160,7 +160,8 @@ class PolyglotRunner:
             elif result.passed_try2:
                 status.finish("✓ pass (try 2)", result.duration)
             elif result.error:
-                status.finish(f"✗ error: {result.error[:50]}", result.duration)
+                status.finish("✗ error", result.duration)
+                click.echo(f"        └─ {result.error}", err=True)
             else:
                 status.finish("✗ fail", result.duration)
 

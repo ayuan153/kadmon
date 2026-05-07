@@ -94,6 +94,8 @@ class AgentLoop:
         """Process an LLM response. Returns patch string if submit called, else None."""
         if not response.tool_calls:
             self.context.add(Message(role='assistant', content=response.content))
+            # Must end with user message for next API call
+            self.context.add(Message(role='user', content='Continue with the task. Use tools to make progress.'))
             return None
 
         # Build assistant content blocks
