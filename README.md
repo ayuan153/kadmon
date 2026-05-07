@@ -91,6 +91,9 @@ AWS_PROFILE=other-profile ./dev bench
 # Full run (~$20, comparable to Aider leaderboard)
 ./dev bench-full
 
+# More parallelism (default: 4 workers)
+kadmon bench -j 10
+
 # Specific languages
 kadmon bench --languages python,javascript --limit 20
 
