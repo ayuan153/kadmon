@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# Quick smoke test for kadmon using the 'kadmon' AWS profile.
+# Usage:
+#   ./dev bench              # 5 Python exercises (quick, ~$1)
+#   ./dev bench 20           # 20 Python exercises
+#   ./dev bench-full         # All 225 exercises (~$20)
+#   ./dev run "Fix the bug"  # Run on current repo
+#   ./dev test               # Run unit tests
+#   ./dev lint               # Run linter
+
+set -euo pipefail
+
+export AWS_PROFILE="${AWS_PROFILE:-kadmon}"
+export AWS_REGION="${AWS_REGION:-us-east-1}"
+MODEL="${KADMON_MODEL:-us.anthropic.claude-sonnet-4-20250514-v1:0}"
+
+case "${1:-help}" in
+  bench)
+    LIMIT="${2:-5}"
+    echo "Running $LIMIT Python exercises with profile=$AWS_PROFILE region=$AWS_REGION model=$MODEL"
+    kadmon bench --languages python --limit "$LIMIT" --provider bedrock \
+      --aws-region "$AWS_REGION" --model "$MODEL"
+    ;;
+  bench-full)
+    echo "Running full polyglot benchmark (225 exercises)"
+    kadmon bench --provider bedrock --aws-region "$AWS_REGION" --model "$MODEL"
+    ;;
+  run)
+    shift
+    kadmon run --task "$*" --repo . --provider bedrock \
+      --aws-region "$AWS_REGION" --model "$MODEL"
+    ;;
+  test)
+    pytest tests/ -v
+    ;;
+  lint)
+    ruff check kadmon/ tests/
+    ;;
+  help|*)
+    echo "Usage: ./dev <command>"
+    echo ""
+    echo "Commands:"
+    echo "  bench [N]     Run N Python exercises (default: 5, ~\$1)"
+    echo "  bench-full    Run all 225 exercises (~\$20)"
+    echo "  run \"task\"    Run kadmon on current repo"
+    echo "  test          Run unit tests"
+    echo "  lint          Run ruff linter"
+    echo ""
+    echo "Environment:"
+    echo "  AWS_PROFILE   AWS profile (default: kadmon)"
+    echo "  AWS_REGION    AWS region (default: us-east-1)"
+    echo "  KADMON_MODEL  Model ID (default: us.anthropic.claude-sonnet-4-20250514-v1:0)"
+    ;;
+esac

@@ -21,6 +21,30 @@ Key design choices:
 - **Loop detection + backtracking** with git-based checkpoints
 - **No frameworks** — provider SDKs directly, ~100-line core loop
 
+## Quick Start (with Bedrock)
+
+```bash
+# One-time setup: add 'kadmon' profile to ~/.aws/config
+# (already done if you cloned this repo and ran setup)
+cat >> ~/.aws/config << 'EOF'
+[profile kadmon]
+credential_process=your-credential-tool --account YOUR_ACCOUNT --role YourRole
+region=us-east-1
+EOF
+
+# Install
+pip install -e ".[dev]"
+
+# Smoke test (5 Python exercises, ~$1)
+./dev bench
+
+# Run on a repo
+./dev run "Fix the TypeError in utils.py"
+
+# Unit tests
+./dev test
+```
+
 ## Setup
 
 ```bash
