@@ -21,13 +21,24 @@ pip install -e ".[dev]"
 
 ### AWS Setup (one-time)
 
-Kadmon uses Bedrock by default. Add a `kadmon` profile to `~/.aws/config`:
+Kadmon uses Bedrock by default. Configure AWS credentials however you prefer:
 
-```ini
+```bash
+# Option A: SSO
+aws configure sso
+
+# Option B: credential process in ~/.aws/config
 [profile kadmon]
 credential_process=your-credential-tool --account YOUR_ACCOUNT --role YourRole
 region=us-east-1
+
+# Option C: environment variables
+export AWS_ACCESS_KEY_ID=...
+export AWS_SECRET_ACCESS_KEY=...
+export AWS_REGION=us-east-1
 ```
+
+Set `AWS_PROFILE=kadmon` (or your profile name) before running kadmon.
 
 ## Architecture
 
