@@ -12,7 +12,7 @@ set -euo pipefail
 
 export AWS_PROFILE="${AWS_PROFILE:-kadmon}"
 export AWS_REGION="${AWS_REGION:-us-east-1}"
-MODEL="${KADMON_MODEL:-us.anthropic.claude-sonnet-4-6-20260101-v1:0}"
+MODEL="${KADMON_MODEL:-us.anthropic.claude-sonnet-4-6}"
 
 case "${1:-help}" in
   bench)
