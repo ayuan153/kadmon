@@ -33,6 +33,16 @@ class _LiveStatus:
         click.echo(line + " " * padding)
 
 
+class _NoOpStatus:
+    """Silent status for parallel mode."""
+
+    def update(self, msg: str):
+        pass
+
+    def finish(self, msg: str, duration: float):
+        pass
+
+
 EXERCISM_REPOS = {
     "python": "https://github.com/exercism/python.git",
     "javascript": "https://github.com/exercism/javascript.git",
@@ -103,6 +113,7 @@ class PolyglotRunner:
         max_attempts: int = 2,
         languages: list[str] | None = None,
         timeout: int = 180,
+        workers: int = 1,
     ):
         self.model = model
         self.provider_name = provider
@@ -111,6 +122,7 @@ class PolyglotRunner:
         self.max_attempts = max_attempts
         self.languages = languages or list(EXERCISM_REPOS.keys())
         self.timeout = timeout
+        self.workers = workers
 
     def setup(self):
         """Clone exercism repos if not already present."""
@@ -149,45 +161,111 @@ class PolyglotRunner:
 
         summary = BenchmarkSummary(total=len(exercises))
 
+        if self.workers > 1:
+            self._run_parallel(exercises, summary, out)
+        else:
+            self._run_sequential(exercises, summary, out)
+
+        # Save summary
+        (out / "summary.json").write_text(
+            json.dumps(
+                {
+                    "total": summary.total,
+                    "passed_try1": summary.passed_try1,
+                    "passed_try2": summary.passed_try2,
+                    "pass_rate_1": summary.pass_rate_1,
+                    "pass_rate_2": summary.pass_rate_2,
+                    "errors": summary.errors,
+                    "model": self.model,
+                    "provider": self.provider_name,
+                },
+                indent=2,
+            )
+        )
+
+        return summary
+
+    def _run_sequential(self, exercises, summary, out):
+        """Run exercises one at a time with live status."""
         for i, (lang, ex_path) in enumerate(exercises, 1):
             prefix = f"  [{i}/{len(exercises)}] {lang}/{ex_path.name}"
             status = _LiveStatus(prefix)
             status.update("running...")
             result = self._run_exercise(lang, ex_path, status)
-            # Print final result
-            if result.passed_try1:
-                status.finish("✓ pass (try 1)", result.duration)
-            elif result.passed_try2:
-                status.finish("✓ pass (try 2)", result.duration)
-            elif result.error:
-                status.finish("✗ error", result.duration)
-                click.echo(f"        └─ {result.error}", err=True)
-            else:
-                status.finish("✗ fail", result.duration)
+            self._report_result(result, status)
+            self._record_result(result, summary, out)
 
-            summary.results.append(result)
-            if result.passed_try1:
-                summary.passed_try1 += 1
-            if result.passed_try1 or result.passed_try2:
-                summary.passed_try2 += 1
-            if result.error:
-                summary.errors += 1
+    def _run_parallel(self, exercises, summary, out):
+        """Run exercises in parallel with thread pool."""
+        from concurrent.futures import ThreadPoolExecutor, as_completed
 
-            # Save per-exercise result
-            result_file = out / f"{lang}_{result.name}.json"
-            result_file.write_text(
-                json.dumps(
-                    {
-                        "name": result.name,
-                        "language": lang,
-                        "passed_try1": result.passed_try1,
-                        "passed_try2": result.passed_try2,
-                        "error": result.error,
-                        "duration": result.duration,
-                    },
-                    indent=2,
+        click.echo(f"  Running {len(exercises)} exercises with {self.workers} workers...")
+        completed = 0
+        futures = {}
+
+        with ThreadPoolExecutor(max_workers=self.workers) as pool:
+            for lang, ex_path in exercises:
+                # Use a no-op status for parallel (can't do live single-line updates)
+                future = pool.submit(self._run_exercise, lang, ex_path, _NoOpStatus())
+                futures[future] = (lang, ex_path)
+
+            for future in as_completed(futures):
+                completed += 1
+                lang, ex_path = futures[future]
+                result = future.result()
+                # Print completed result
+                if result.passed_try1:
+                    icon = "✓ try1"
+                elif result.passed_try2:
+                    icon = "✓ try2"
+                elif result.error:
+                    icon = "✗ err"
+                else:
+                    icon = "✗ fail"
+                click.echo(
+                    f"  [{completed}/{len(exercises)}] {lang}/{result.name} "
+                    f"[{result.duration:.1f}s] {icon}"
                 )
+                if result.error:
+                    click.echo(f"        └─ {result.error}", err=True)
+                self._record_result(result, summary, out)
+
+    def _report_result(self, result, status):
+        """Print final status for sequential mode."""
+        if result.passed_try1:
+            status.finish("✓ pass (try 1)", result.duration)
+        elif result.passed_try2:
+            status.finish("✓ pass (try 2)", result.duration)
+        elif result.error:
+            status.finish("✗ error", result.duration)
+            click.echo(f"        └─ {result.error}", err=True)
+        else:
+            status.finish("✗ fail", result.duration)
+
+    def _record_result(self, result, summary, out):
+        """Record result to summary and save JSON."""
+        summary.results.append(result)
+        if result.passed_try1:
+            summary.passed_try1 += 1
+        if result.passed_try1 or result.passed_try2:
+            summary.passed_try2 += 1
+        if result.error:
+            summary.errors += 1
+
+        result_file = out / f"{result.language}_{result.name}.json"
+        result_file.write_text(
+            json.dumps(
+                {
+                    "name": result.name,
+                    "language": result.language,
+                    "passed_try1": result.passed_try1,
+                    "passed_try2": result.passed_try2,
+                    "error": result.error,
+                    "duration": result.duration,
+                },
+                indent=2,
             )
+        )
 
         # Save summary
         (out / "summary.json").write_text(

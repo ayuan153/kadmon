@@ -96,17 +96,20 @@ def eval_cmd(dataset, limit, output, model):
 @click.option("--provider", type=click.Choice(["anthropic", "bedrock"]), default="anthropic")
 @click.option("--aws-region", default="us-west-2")
 @click.option("--setup/--no-setup", default=True, help="Clone exercism repos if needed")
-def bench(languages, limit, output, model, provider, aws_region, setup):
+@click.option("--workers", "-j", type=int, default=1, help="Parallel workers (default: 1)")
+def bench(languages, limit, output, model, provider, aws_region, setup, workers):
     """Run Aider Polyglot benchmark."""
     from kadmon.eval.polyglot import PolyglotRunner
 
     langs = languages.split(",") if languages else None
-    runner = PolyglotRunner(model=model, provider=provider, aws_region=aws_region, languages=langs)
+    runner = PolyglotRunner(
+        model=model, provider=provider, aws_region=aws_region, languages=langs, workers=workers,
+    )
     if setup:
         click.echo("Setting up exercism repos...")
         runner.setup()
 
-    click.echo(f"Running polyglot benchmark ({limit or 'all'} exercises)...")
+    click.echo(f"Running polyglot benchmark ({limit or 'all'} exercises, {workers} workers)...")
     summary = runner.run(limit=limit, output_dir=output)
     click.echo("\nResults:")
     click.echo(

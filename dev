@@ -17,13 +17,15 @@ MODEL="${KADMON_MODEL:-us.anthropic.claude-sonnet-4-6}"
 case "${1:-help}" in
   bench)
     LIMIT="${2:-5}"
-    echo "Running $LIMIT Python exercises with profile=$AWS_PROFILE region=$AWS_REGION model=$MODEL"
+    WORKERS="${3:-4}"
+    echo "Running $LIMIT Python exercises with $WORKERS workers (profile=$AWS_PROFILE model=$MODEL)"
     kadmon bench --languages python --limit "$LIMIT" --provider bedrock \
-      --aws-region "$AWS_REGION" --model "$MODEL"
+      --aws-region "$AWS_REGION" --model "$MODEL" -j "$WORKERS"
     ;;
   bench-full)
-    echo "Running full polyglot benchmark (225 exercises)"
-    kadmon bench --provider bedrock --aws-region "$AWS_REGION" --model "$MODEL"
+    WORKERS="${2:-8}"
+    echo "Running full polyglot benchmark (225 exercises, $WORKERS workers)"
+    kadmon bench --provider bedrock --aws-region "$AWS_REGION" --model "$MODEL" -j "$WORKERS"
     ;;
   run)
     shift
@@ -40,11 +42,11 @@ case "${1:-help}" in
     echo "Usage: ./dev <command>"
     echo ""
     echo "Commands:"
-    echo "  bench [N]     Run N Python exercises (default: 5, ~\$1)"
-    echo "  bench-full    Run all 225 exercises (~\$20)"
-    echo "  run \"task\"    Run kadmon on current repo"
-    echo "  test          Run unit tests"
-    echo "  lint          Run ruff linter"
+    echo "  bench [N] [W]   Run N Python exercises with W workers (default: 5, 4)"
+    echo "  bench-full [W]  Run all 225 exercises with W workers (default: 8)"
+    echo "  run \"task\"      Run kadmon on current repo"
+    echo "  test            Run unit tests"
+    echo "  lint            Run ruff linter"
     echo ""
     echo "Environment:"
     echo "  AWS_PROFILE   AWS profile (default: kadmon)"
