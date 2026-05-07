@@ -351,7 +351,15 @@ class PolyglotRunner:
         work_dir = Path(f"/tmp/kadmon_polyglot/{lang}/{ex_path.name}")
         if work_dir.exists():
             shutil.rmtree(work_dir)
-        shutil.copytree(ex_path, work_dir)
+        # Copy but skip node_modules/build/target (symlink instead)
+        shutil.copytree(
+            ex_path, work_dir,
+            ignore=shutil.ignore_patterns("node_modules", "build", "target", ".gradle"),
+        )
+        # Symlink node_modules from source if it exists (avoids copying thousands of files)
+        src_nm = ex_path / "node_modules"
+        if src_nm.exists():
+            os.symlink(src_nm, work_dir / "node_modules")
         # Init git so kadmon's submit tool works
         subprocess.run(["git", "init", "--quiet"], cwd=work_dir, check=True)
         subprocess.run(["git", "add", "."], cwd=work_dir, check=True)
