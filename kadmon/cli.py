@@ -27,14 +27,14 @@ def main():
 @main.command()
 @click.option("--task", required=True, type=str, help="Task description")
 @click.option("--repo", default=".", type=click.Path(exists=True), help="Repository path")
-@click.option("--model", default="claude-sonnet-4-20250514", type=str, help="Model to use")
+@click.option("--model", default="us.anthropic.claude-sonnet-4-6", type=str, help="Model to use")
 @click.option(
     "--provider",
     type=click.Choice(["anthropic", "bedrock"]),
-    default="anthropic",
+    default="bedrock",
     help="LLM provider",
 )
-@click.option("--aws-region", default="us-west-2", help="AWS region for Bedrock")
+@click.option("--aws-region", default="us-east-1", help="AWS region for Bedrock")
 def run(task: str, repo: str, model: str, provider: str, aws_region: str):
     """Run kadmon on a task."""
     from kadmon.tools import build_index, create_default_registry
@@ -92,9 +92,9 @@ def eval_cmd(dataset, limit, output, model):
 )
 @click.option("--limit", type=int, default=None, help="Max exercises to run")
 @click.option("--output", default="eval_results/polyglot", help="Output directory")
-@click.option("--model", default="claude-sonnet-4-20250514")
-@click.option("--provider", type=click.Choice(["anthropic", "bedrock"]), default="anthropic")
-@click.option("--aws-region", default="us-west-2")
+@click.option("--model", default="us.anthropic.claude-sonnet-4-6")
+@click.option("--provider", type=click.Choice(["anthropic", "bedrock"]), default="bedrock")
+@click.option("--aws-region", default="us-east-1")
 @click.option("--setup/--no-setup", default=True, help="Clone exercism repos if needed")
 @click.option("--workers", "-j", type=int, default=1, help="Parallel workers (default: 1)")
 def bench(languages, limit, output, model, provider, aws_region, setup, workers):

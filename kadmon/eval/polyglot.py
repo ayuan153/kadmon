@@ -106,9 +106,9 @@ class PolyglotRunner:
 
     def __init__(
         self,
-        model: str = "claude-sonnet-4-20250514",
-        provider: str = "anthropic",
-        aws_region: str = "us-west-2",
+        model: str = "us.anthropic.claude-sonnet-4-6",
+        provider: str = "bedrock",
+        aws_region: str = "us-east-1",
         exercises_dir: str = "tmp.benchmarks/polyglot",
         max_attempts: int = 2,
         languages: list[str] | None = None,
