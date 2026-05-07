@@ -98,7 +98,7 @@ def eval_cmd(dataset, limit, output, model):
 @click.option("--provider", type=click.Choice(["anthropic", "bedrock"]), default=DEFAULT_PROVIDER)
 @click.option("--aws-region", default=DEFAULT_REGION)
 @click.option("--setup/--no-setup", default=True, help="Clone exercism repos if needed")
-@click.option("--workers", "-j", type=int, default=1, help="Parallel workers (default: 1)")
+@click.option("--workers", "-j", type=int, default=4, help="Parallel workers (default: 4)")
 def bench(languages, limit, output, model, provider, aws_region, setup, workers):
     """Run Aider Polyglot benchmark."""
     from kadmon.eval.polyglot import PolyglotRunner
