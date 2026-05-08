@@ -41,6 +41,7 @@ class AgentLoop:
         session_tracker: SessionTracker | None = None,
         mode: str = "cautious",
         channel: HumanChannel | None = None,
+        repo_root: str = ".",
     ):
         self.provider = provider
         self.tools = tools
@@ -51,6 +52,16 @@ class AgentLoop:
         self.mode = mode
         self.context = ContextManager()
         self.loop_detector = LoopDetector()
+        # Handoff system (autonomous context management)
+        self._handoff_monitor = None
+        self._handoff_manager = None
+        if librarian or session_tracker:
+            from kadmon.agent.handoff import HandoffManager, HandoffMonitor
+
+            self._handoff_monitor = HandoffMonitor()
+            self._handoff_manager = HandoffManager(
+                repo_root=repo_root, librarian=librarian, session_tracker=session_tracker
+            )
         # Register plan tool
         self._plan_tool = PlanTool()
         self.tools.register(self._plan_tool)
@@ -119,6 +130,9 @@ class AgentLoop:
             done = self._process_response(response)
             if done:
                 return done
+            # Check if handoff should trigger
+            if self._check_handoff():
+                continue  # Context was reset, loop continues with fresh state
 
         return ""
 
@@ -217,8 +231,24 @@ class AgentLoop:
                 Message(role="user", content=self.loop_detector.get_recovery_message())
             )
             self.loop_detector.reset()
+            if self._handoff_monitor:
+                self._handoff_monitor.record_loop_recovery()
 
         return None
+
+    def _check_handoff(self) -> bool:
+        """Check if handoff should trigger. If so, execute it and return True."""
+        if not self._handoff_monitor or not self._handoff_manager:
+            return False
+        plan = self._plan_tool.plan
+        trigger = self._handoff_monitor.check(self.context, plan)
+        if not trigger:
+            return False
+        # Execute handoff
+        resume_prompt = self._handoff_manager.execute(self.context, plan, trigger)
+        self.context.add(Message(role="user", content=resume_prompt))
+        self._handoff_monitor.reset()
+        return True
 
     def _filtered_tools(self, allowed: set[str]) -> list[dict]:
         """Return tool definitions filtered to the allowed set."""

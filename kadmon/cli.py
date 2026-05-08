@@ -65,6 +65,7 @@ def run(task: str, repo: str, model: str, provider: str, aws_region: str, mode: 
         session_tracker=session_tracker,
         mode=mode,
         channel=channel,
+        repo_root=repo_path,
     )
     result = agent.run(task)
     db.close()
