@@ -191,6 +191,16 @@ See [AGENTS.md](AGENTS.md) for AI contribution guidelines. Key rules:
 - Conventional commits with scopes
 - One concern per commit
 
+## Publishing
+
+```bash
+./publish          # patch: 0.1.0 → 0.1.1
+./publish minor    # minor: 0.1.1 → 0.2.0
+./publish major    # major: 0.2.0 → 1.0.0
+```
+
+Bumps version, commits, tags, pushes. CI publishes to PyPI + npm automatically.
+
 ## License
 
 MIT
