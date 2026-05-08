@@ -37,12 +37,19 @@ def main():
     help="LLM provider",
 )
 @click.option("--aws-region", default=DEFAULT_REGION, help="AWS region for Bedrock")
-def run(task: str, repo: str, model: str, provider: str, aws_region: str):
+@click.option(
+    "--mode",
+    type=click.Choice(["yolo", "cautious", "paranoid"]),
+    default="cautious",
+    help="Agent mode",
+)
+def run(task: str, repo: str, model: str, provider: str, aws_region: str, mode: str):
     """Run kadmon on a task."""
     from kadmon.tools import build_index, create_default_registry
     from kadmon.agent import AgentLoop
     from kadmon.memory.librarian import Librarian
     from kadmon.memory.session_tracker import SessionTracker
+    from kadmon.human import CLIChannel
 
     llm = _make_provider(provider, model, aws_region)
     repo_path = os.path.abspath(repo)
@@ -50,7 +57,15 @@ def run(task: str, repo: str, model: str, provider: str, aws_region: str):
     tools = create_default_registry(repo_path, db=db)
     librarian = Librarian(repo_path)
     session_tracker = SessionTracker(repo_path)
-    agent = AgentLoop(provider=llm, tools=tools, librarian=librarian, session_tracker=session_tracker)
+    channel = CLIChannel() if mode != "yolo" else None
+    agent = AgentLoop(
+        provider=llm,
+        tools=tools,
+        librarian=librarian,
+        session_tracker=session_tracker,
+        mode=mode,
+        channel=channel,
+    )
     result = agent.run(task)
     db.close()
     if result:
@@ -109,7 +124,11 @@ def bench(languages, limit, output, model, provider, aws_region, setup, workers)
 
     langs = languages.split(",") if languages else None
     runner = PolyglotRunner(
-        model=model, provider=provider, aws_region=aws_region, languages=langs, workers=workers,
+        model=model,
+        provider=provider,
+        aws_region=aws_region,
+        languages=langs,
+        workers=workers,
     )
     if setup:
         click.echo("Setting up exercism repos...")
