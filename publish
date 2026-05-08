@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Publish a new version of kadmon.
+# Usage: ./publish [patch|minor|major]
+#
+# Examples:
+#   ./publish         → 0.1.0 → 0.1.1 (patch)
+#   ./publish minor   → 0.1.1 → 0.2.0
+#   ./publish major   → 0.2.0 → 1.0.0
+
+set -euo pipefail
+
+BUMP="${1:-patch}"
+
+# Get current version from pyproject.toml
+CURRENT=$(grep '^version' pyproject.toml | head -1 | sed 's/.*"\(.*\)"/\1/')
+echo "Current version: $CURRENT"
+
+# Calculate new version
+IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+case "$BUMP" in
+  patch) PATCH=$((PATCH + 1)) ;;
+  minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+  major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+  *) echo "Usage: ./publish [patch|minor|major]"; exit 1 ;;
+esac
+NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+echo "New version: $NEW_VERSION"
+
+# Confirm
+read -p "Publish v$NEW_VERSION? [y/N] " -n 1 -r
+echo
+if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+  echo "Aborted."
+  exit 0
+fi
+
+# Update version in pyproject.toml
+sed -i '' "s/^version = \"$CURRENT\"/version = \"$NEW_VERSION\"/" pyproject.toml
+
+# Commit and tag
+git add pyproject.toml
+git commit -m "release: v$NEW_VERSION"
+git tag "v$NEW_VERSION"
+git push && git push --tags
+
+echo ""
+echo "✓ Tagged v$NEW_VERSION and pushed."
+echo "  GitHub Actions will now publish to PyPI + npm."
+echo "  Watch: https://github.com/ayuan153/kadmon/actions"
