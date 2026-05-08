@@ -54,8 +54,8 @@ class AgentLoop:
         # Register plan tool
         self._plan_tool = PlanTool()
         self.tools.register(self._plan_tool)
-        # Register ask_human tool only in cautious/paranoid mode
-        if mode != "yolo" and channel:
+        # Register ask_human tool when channel provided (ambiguity resolution, not permission)
+        if channel:
             from kadmon.tools.ask_human import AskHumanTool
 
             self.tools.register(AskHumanTool(channel))

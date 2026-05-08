@@ -85,7 +85,7 @@ def test_ask_human_tool_no_questions():
     assert "Error" in result.output
 
 
-def test_ask_human_not_registered_in_yolo():
+def test_ask_human_registered_with_channel():
     from kadmon.agent.loop import AgentLoop
 
     provider = MagicMock()
@@ -95,20 +95,19 @@ def test_ask_human_not_registered_in_yolo():
         provider=provider, tools=registry, mode="yolo", channel=channel, use_planning=False
     )
     tool_names = [t["name"] for t in agent.tools.definitions()]
-    assert "ask_human" not in tool_names
+    assert "ask_human" in tool_names
 
 
-def test_ask_human_registered_in_cautious():
+def test_ask_human_not_registered_without_channel():
     from kadmon.agent.loop import AgentLoop
 
     provider = MagicMock()
     registry = ToolRegistry()
-    channel = MagicMock()
     agent = AgentLoop(
-        provider=provider, tools=registry, mode="cautious", channel=channel, use_planning=False
+        provider=provider, tools=registry, mode="cautious", channel=None, use_planning=False
     )
     tool_names = [t["name"] for t in agent.tools.definitions()]
-    assert "ask_human" in tool_names
+    assert "ask_human" not in tool_names
 
 
 # --- WebhookChannel tests ---

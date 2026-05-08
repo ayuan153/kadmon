@@ -7,11 +7,11 @@ DEFAULT_MODEL = "us.anthropic.claude-sonnet-4-6"
 DEFAULT_PROVIDER = "bedrock"
 DEFAULT_REGION = "us-east-1"
 
-# Agent modes
-MODE_YOLO = "yolo"  # Never ask, make best judgment
-MODE_CAUTIOUS = "cautious"  # Ask on ambiguity (default)
-MODE_PARANOID = "paranoid"  # Ask before any non-trivial action
-DEFAULT_MODE = MODE_CAUTIOUS
+# Agent modes (controls tool call approval, NOT ambiguity questions)
+MODE_YOLO = "yolo"  # No approval needed for any tool call
+MODE_CAUTIOUS = "cautious"  # Approve destructive operations (default)
+MODE_PARANOID = "paranoid"  # Approve all non-read operations
+DEFAULT_MODE = MODE_YOLO  # Default to yolo (agent asks about ambiguity separately)
 
 
 class Settings(BaseModel):

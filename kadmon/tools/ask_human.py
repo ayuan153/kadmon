@@ -9,9 +9,10 @@ class AskHumanTool(Tool):
 
     name = "ask_human"
     description = (
-        "Ask the human a question when you are uncertain, need clarification, "
-        "or face an ambiguous requirement. Batch related questions together. "
-        "Only available in cautious/paranoid mode."
+        "Ask the human to resolve ambiguity. Use when: the requirement has multiple valid "
+        "interpretations, you're missing information you can't infer from the codebase, "
+        "or a design decision could go either way. Batch related questions together. "
+        "Do NOT use for permission — just for genuine uncertainty about what to build."
     )
     parameters = {
         "type": "object",
