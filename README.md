@@ -1,113 +1,150 @@
 # Kadmon
 
-A coding agent that solves software engineering tasks autonomously. Targets top performance on SWE-bench and Aider Polyglot benchmarks through scaffolding excellence — not model dependence.
+An autonomous coding agent that manages its own context, asks clarifying questions, and hands off between sessions without human intervention. Scores 100% on Aider Polyglot (Python) benchmark.
 
-## Quick Start
+## Install
 
 ```bash
+pip install kadmon
+```
+
+## Getting Started
+
+```bash
+# Interactive setup — picks your provider, configures credentials, tests the connection
+kadmon init
+
+# Run on a repo
+cd your-project
+kadmon run --task "Fix the failing test in test_auth.py"
+```
+
+`kadmon init` walks you through:
+1. Choose provider (Bedrock, Anthropic, OpenAI)
+2. Configure credentials (AWS profile, API key, etc.)
+3. Test the connection
+4. Save to `.kadmon/config.toml`
+
+### Manual Provider Setup
+
+If you prefer to skip `kadmon init`:
+
+**AWS Bedrock** (default):
+```bash
+# Any standard AWS credential method works (SSO, env vars, profiles)
+export AWS_PROFILE=your-profile
+export AWS_REGION=us-east-1
+kadmon run --task "..." --provider bedrock --model us.anthropic.claude-sonnet-4-6
+```
+
+**Anthropic Direct**:
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+kadmon run --task "..." --provider anthropic --model claude-sonnet-4-20250514
+```
+
+**OpenAI**:
+```bash
+export OPENAI_API_KEY=sk-...
+kadmon run --task "..." --provider openai --model gpt-4o
+```
+
+## What Makes Kadmon Different
+
+Most coding agents are "very talented junior engineers" — they need constant supervision and context management. Kadmon is designed to be piloted like a **team lead manages a senior engineer**:
+
+1. **No guessing** — asks clarifying questions when requirements are ambiguous (not for permission — for correctness)
+2. **Rock climbing** — verifies each step before moving to the next, never sprints into the void
+3. **Self-managing context** — detects when its context is degrading, writes a handoff doc, and continues in a fresh session automatically
+
+### Autonomous Context Management
+
+```
+.kadmon/
+├── config.toml          # Provider config, preferences
+├── library/             # Persistent knowledge (survives across sessions)
+│   ├── architecture.md  # Project structure notes
+│   ├── conventions.md   # Patterns, gotchas
+│   └── tasks/current.md # Active task state
+├── session.json         # What's in flight right now
+├── handoffs/            # Handoff docs (context continuity)
+└── symbols.db           # Code structure index (tree-sitter)
+```
+
+The agent automatically:
+- Loads relevant library context on startup (cold start)
+- Saves learnings after each completed step
+- Detects context degradation (token budget, loops, quality drop)
+- Writes a structured handoff and resets — no human intervention needed
+
+## Local Development
+
+```bash
+# Clone and install in dev mode
 git clone https://github.com/ayuan153/kadmon.git
 cd kadmon
 pip install -e ".[dev]"
 
-# Run benchmark (5 Python exercises, ~$1)
+# Run tests
+./dev test
+
+# Lint
+./dev lint
+
+# Run kadmon against a local repo
+./dev run "Fix the bug in parser.py"
+
+# Benchmark (5 Python exercises, quick smoke test)
 ./dev bench
 
-# Run on a repo
-./dev run "Fix the TypeError in utils.py"
-
-# Unit tests
-./dev test
+# Full benchmark (225 exercises, all languages)
+./dev bench-full
 ```
 
-### AWS Setup (one-time)
-
-Kadmon uses Bedrock by default. Configure AWS credentials however you prefer:
+### Dev Script Reference
 
 ```bash
-# Option A: SSO
-aws configure sso
-
-# Option B: credential process in ~/.aws/config
-[profile kadmon]
-credential_process=your-credential-tool --account YOUR_ACCOUNT --role YourRole
-region=us-east-1
-
-# Option C: environment variables
-export AWS_ACCESS_KEY_ID=...
-export AWS_SECRET_ACCESS_KEY=...
-export AWS_REGION=us-east-1
+./dev bench [N]     # N Python exercises (default: 5)
+./dev bench-full    # All 225 exercises, 6 languages
+./dev run "task"    # Run kadmon on current repo
+./dev test          # pytest
+./dev lint          # ruff
 ```
 
-Set `AWS_PROFILE=kadmon` (or your profile name) before running kadmon.
-
-## Architecture
-
-```
-kadmon/
-├── agent/       # ReAct loop, planning, backtracking, architect/editor modes
-├── providers/   # LLM providers (Anthropic direct, AWS Bedrock)
-├── tools/       # Agent tools (file I/O, search, shell, skeleton, references)
-├── eval/        # Benchmark harnesses (SWE-bench, Aider Polyglot)
-├── index/       # Tree-sitter symbol index (SQLite, incremental)
-└── memory/      # Read cache, cross-session memory
-```
-
-Key design choices:
-- **Single-threaded ReAct loop** with architect/editor phase separation
-- **SQLite symbol index** with tree-sitter for structural code understanding
-- **Hash-based read dedup** to minimize token waste on re-reads
-- **Loop detection + backtracking** with git-based checkpoints
-- **No frameworks** — provider SDKs directly, ~100-line core loop
-
-## Dev Script
-
-The `./dev` script is the primary interface for development:
+### Running Against Your Own Code
 
 ```bash
-./dev bench        # 5 Python exercises (quick smoke test)
-./dev bench 20     # 20 Python exercises
-./dev bench-full   # All 225 exercises, all 6 languages
-./dev run "task"   # Run kadmon on current repo
-./dev test         # Unit tests
-./dev lint         # Ruff linter
-```
+# From any repo:
+kadmon run --task "Add input validation to the create_user endpoint"
 
-Override defaults with env vars:
-```bash
-KADMON_MODEL=us.anthropic.claude-opus-4-6 ./dev bench
-AWS_PROFILE=other-profile ./dev bench
+# With planning disabled (faster, simpler loop — good for debugging):
+kadmon run --task "Fix the typo in README.md" --no-planning
+
+# In yolo mode (no tool approval gates):
+kadmon run --task "Refactor the auth module" --mode yolo
 ```
 
 ## Benchmarking
 
 ### Aider Polyglot
 
-225 Exercism exercises across 6 languages (Python, JS, Go, Rust, Java, C++). Runs 4 workers in parallel by default.
+225 Exercism exercises across Python, JavaScript, Go, Rust, Java, C++.
 
 ```bash
-# Quick iteration
-./dev bench 10
+# Quick smoke test (~$1)
+kadmon bench --languages python --limit 5
 
-# Full run (~$20, comparable to Aider leaderboard)
-./dev bench-full
+# Full Python
+kadmon bench --languages python
 
-# More parallelism (default: 4 workers)
+# All languages, 10 parallel workers
 kadmon bench -j 10
 
-# Specific languages
-kadmon bench --languages python,javascript --limit 20
-
-# Sequential mode for debugging (live timer per exercise)
+# Sequential (live timer, good for debugging)
 kadmon bench --limit 5 -j 1
 ```
 
-Results saved to `eval_results/polyglot/`:
-- `summary.json` — pass rates and totals
-- `{lang}_{exercise}.json` — per-exercise results
-
-Key metrics:
-- **pass_rate_1**: solved on first attempt
-- **pass_rate_2**: solved within 2 attempts (Aider leaderboard metric)
+Results: `eval_results/polyglot/summary.json`
 
 ### SWE-bench
 
@@ -115,9 +152,29 @@ Key metrics:
 kadmon eval --dataset swe_bench_verified_mini.json --limit 10
 ```
 
+## Architecture
+
+```
+kadmon/
+├── agent/       # ReAct loop, planning, backtracking, handoff, pruner
+├── providers/   # LLM providers (Bedrock, Anthropic, OpenAI)
+├── tools/       # file I/O, search, shell, skeleton, references, plan, ask_human
+├── human/       # Question batching, CLI/webhook channels
+├── eval/        # Benchmark harnesses (Aider Polyglot, SWE-bench)
+├── index/       # Tree-sitter symbol index (SQLite)
+└── memory/      # Librarian, session tracker, read cache
+```
+
+Key design:
+- **Single-threaded ReAct loop** with architect/editor phase separation
+- **No frameworks** — provider SDKs directly, minimal core
+- **Autonomous handoff** — detects context degradation, resets with continuity
+- **File-based memory** — `.kadmon/library/` persists knowledge across sessions
+- **Ambiguity resolution** — `ask_human` tool for genuine uncertainty (not permission)
+
 ## Configuration
 
-All defaults live in `kadmon/config.py`:
+All defaults in `kadmon/config.py`:
 
 ```python
 DEFAULT_MODEL = "us.anthropic.claude-sonnet-4-6"
@@ -125,67 +182,14 @@ DEFAULT_PROVIDER = "bedrock"
 DEFAULT_REGION = "us-east-1"
 ```
 
-Update there when new models ship — CLI and eval pick it up automatically.
+Per-project config at `.kadmon/config.toml` (created by `kadmon init`).
 
-## Development
+## Contributing
 
-### Build & test loop
-
-```bash
-ruff check kadmon/ tests/    # Lint
-pytest tests/ -v             # 61 tests
-```
-
-### Adding a new tool
-
-1. Create `kadmon/tools/your_tool.py` extending `Tool`
-2. Define `name`, `description`, `parameters` (JSON Schema), `execute()`
-3. Register in `kadmon/tools/__init__.py` → `create_default_registry()`
-4. Add tests, run `./dev test && ./dev lint`
-
-### Commit convention
-
-[Conventional Commits](https://www.conventionalcommits.org/) with scopes:
-
-```
-feat(tools): add rename_symbol tool
-fix(agent): prevent infinite loop on repeated edit failures
-test(eval): add polyglot benchmark edge cases
-```
-
-See [AGENTS.md](AGENTS.md) for full AI contribution guidelines.
-
-## CLI Reference
-
-```
-kadmon run       Run the agent on a task
-kadmon bench     Run Aider Polyglot benchmark
-kadmon eval      Run SWE-bench evaluation
-
-Defaults (from kadmon/config.py):
-  model:     us.anthropic.claude-sonnet-4-6
-  provider:  bedrock
-  region:    us-east-1
-
-kadmon run:
-  --task          Task description (required)
-  --repo          Repository path (default: .)
-  --model         Override model
-  --provider      anthropic | bedrock
-  --aws-region    Override region
-
-kadmon bench:
-  --languages     Comma-separated: python,javascript,go,rust,java,cpp
-  --limit         Max exercises
-  --output        Output directory
-  -j, --workers   Parallel workers (default: 4)
-  --setup/--no-setup  Clone exercism repos if needed
-
-kadmon eval:
-  --dataset       Path to SWE-bench instances JSON
-  --limit         Max instances
-  --output        Output directory
-```
+See [AGENTS.md](AGENTS.md) for AI contribution guidelines. Key rules:
+- Build → Lint → Test → Commit (no skipping)
+- Conventional commits with scopes
+- One concern per commit
 
 ## License
 
