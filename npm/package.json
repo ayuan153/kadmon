@@ -1,0 +1,23 @@
+{
+  "name": "kadmon",
+  "version": "0.1.0",
+  "description": "An autonomous coding agent that manages its own context across sessions",
+  "bin": {
+    "kadmon": "./bin/kadmon.mjs"
+  },
+  "keywords": ["ai", "agent", "coding", "llm", "autonomous", "claude", "bedrock"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ayuan153/kadmon.git"
+  },
+  "homepage": "https://github.com/ayuan153/kadmon",
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "bin/",
+    "README.md",
+    "LICENSE"
+  ]
+}
