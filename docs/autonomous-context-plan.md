@@ -61,6 +61,7 @@ The agent detects when it should "cut itself off" — writes structured memory t
 .kadmon/
 ├── config.toml              # Project config (existing)
 ├── symbols.db               # Symbol index (existing)
+├── session.json             # Active session state + delegation tracking
 ├── library/
 │   ├── index.md             # Table of contents (auto-maintained)
 │   ├── architecture.md      # Project architecture notes
@@ -71,6 +72,9 @@ The agent detects when it should "cut itself off" — writes structured memory t
 │       └── completed/
 │           ├── fix-auth-bug.md
 │           └── add-pagination.md
+├── sessions/                # Completed session history
+│   ├── a1b2c3d4.json
+│   └── e5f6g7h8.json
 └── handoffs/
     ├── latest.md            # Most recent handoff doc
     └── history/
@@ -102,12 +106,54 @@ class Librarian:
 - Librarian decides what to load based on current task (keyword match initially, embeddings later)
 - Auto-maintains `index.md` as table of contents
 
+### Delegation Tracking (OMKC-style)
+
+Track what subagents are doing right now — enables resumability after crashes and deduplication on restart.
+
+#### Session File (`.kadmon/session.json`)
+
+```json
+{
+  "session_id": "a1b2c3d4",
+  "started": "2026-05-08T10:00:00Z",
+  "task": "Add rate limiting to /api routes",
+  "status": "in_progress",
+  "delegations": [
+    {
+      "id": "explore-middleware",
+      "agent": "worker",
+      "task": "Find existing middleware patterns",
+      "status": "completed",
+      "started": "2026-05-08T10:00:05Z",
+      "completed": "2026-05-08T10:00:30Z",
+      "summary": "Found 3 middleware in src/middleware/: auth, cors, logging"
+    },
+    {
+      "id": "implement-rate-limit",
+      "agent": "worker",
+      "task": "Implement rate limiting middleware",
+      "status": "in_progress",
+      "started": "2026-05-08T10:00:35Z"
+    }
+  ]
+}
+```
+
+#### Behavior
+- Written deterministically (on delegation start → `in_progress`, on completion → `completed` with summary)
+- On session resume: read session.json, show completed work, re-dispatch only interrupted delegations
+- On handoff: session marked `handed_off`, new session created with back-reference
+- Pruned after 14 days (configurable)
+
 ### Tasks
 - [ ] Library directory structure and file format spec
 - [ ] Librarian class: load_relevant, save_learning, save_task_context
-- [ ] Cold start: on session begin, load config + relevant library entries
+- [ ] Cold start: on session begin, load config + relevant library entries + check session.json
 - [ ] Auto-save: after completing a plan step, save learnings
 - [ ] Index maintenance: update index.md when library changes
+- [ ] Session file: create on start, update on delegation start/complete
+- [ ] Session resume: detect interrupted session, offer to continue
+- [ ] Session history: `.kadmon/sessions/` with completed session files
 
 ---
 
