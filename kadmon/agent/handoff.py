@@ -74,8 +74,17 @@ class HandoffManager:
 
     def execute(self, context: ContextManager, plan: Plan | None, trigger: HandoffTrigger) -> str:
         """Execute a handoff. Returns the handoff document to inject into fresh context."""
-        # 1. Craft handoff document
-        handoff_doc = self._craft_handoff(plan, trigger)
+        from kadmon.agent.pruner import Pruner
+
+        pruner = Pruner()
+
+        # 0. Prune library (archive old task if pivoting)
+        if self.librarian:
+            new_task = plan.goal if plan else ""
+            pruner.prune_library(self.librarian.library_path, new_task)
+
+        # 1. Craft handoff document (uses pruner for concise summary)
+        handoff_doc = self._craft_handoff(plan, trigger, pruner)
 
         # 2. Save to library
         if self.librarian and plan:
@@ -100,7 +109,7 @@ class HandoffManager:
         resume_prompt = self._build_resume_prompt(cold_start, handoff_doc)
         return resume_prompt
 
-    def _craft_handoff(self, plan: Plan | None, trigger: HandoffTrigger) -> str:
+    def _craft_handoff(self, plan: Plan | None, trigger: HandoffTrigger, pruner=None) -> str:
         """Generate the handoff document."""
         timestamp = time.strftime("%Y-%m-%d %H:%M")
         sections = [
@@ -108,7 +117,13 @@ class HandoffManager:
             f"\nReason: {trigger.reason} ({trigger.details})",
         ]
 
-        if plan:
+        if plan and pruner:
+            # Use pruner for concise, relevant summary
+            pruned = pruner.prune_for_handoff(plan)
+            if pruned:
+                sections.append(f"\n## Context\n\n{pruned}")
+            sections.append(f"\n## Goal\n\n{plan.goal}")
+        elif plan:
             # Accomplished
             done = [s for s in plan.steps if s.status == StepStatus.DONE]
             if done:
