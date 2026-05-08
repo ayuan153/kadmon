@@ -1,9 +1,17 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from kadmon.providers.base import LLMProvider, Message
 from kadmon.tools.base import ToolRegistry
 from kadmon.agent.context import ContextManager
 from kadmon.agent.prompts import SYSTEM_PROMPT, ARCHITECT_PROMPT, EDITOR_PROMPT
 from kadmon.agent.recovery import LoopDetector
 from kadmon.tools.plan import PlanTool
+
+if TYPE_CHECKING:
+    from kadmon.memory.librarian import Librarian
+    from kadmon.memory.session_tracker import SessionTracker
 
 
 # Tools available in each mode
@@ -19,11 +27,15 @@ class AgentLoop:
         tools: ToolRegistry,
         max_iterations: int = 50,
         use_planning: bool = True,
+        librarian: Librarian | None = None,
+        session_tracker: SessionTracker | None = None,
     ):
         self.provider = provider
         self.tools = tools
         self.max_iterations = max_iterations
         self.use_planning = use_planning
+        self.librarian = librarian
+        self.session_tracker = session_tracker
         self.context = ContextManager()
         self.loop_detector = LoopDetector()
         # Register plan tool
@@ -32,6 +44,17 @@ class AgentLoop:
 
     def run(self, task: str) -> str:
         """Run the agent loop. Returns the final patch or empty string."""
+        # Cold start: inject library context
+        if self.librarian:
+            library_context = self.librarian.load_relevant(task)
+            if library_context:
+                self.context.add(Message(role='user', content=library_context))
+                self.context.add(Message(role='assistant', content="I've loaded the project context from the library. I'll use this knowledge as I work on the task."))
+
+        # Start session tracking
+        if self.session_tracker:
+            self.session_tracker.start(task)
+
         if self.use_planning:
             return self._run_with_planning(task)
         return self._run_simple(task)
@@ -115,6 +138,13 @@ class AgentLoop:
             result = self.tools.execute(tc.name, **tc.arguments)
 
             if tc.name == 'submit' and not result.error:
+                if self.session_tracker:
+                    self.session_tracker.complete_session()
+                if self.librarian:
+                    self.librarian.save_task_context(
+                        self._plan_tool.plan.goal if self._plan_tool.plan else 'task',
+                        'Task completed. Patch submitted.',
+                    )
                 return result.output
 
             if self.loop_detector.record_action(tc.name, tc.arguments):
@@ -130,6 +160,19 @@ class AgentLoop:
             })
 
         self.context.add(Message(role='user', content=tool_results))
+
+        # Auto-save on plan step completion
+        if self.librarian and self._plan_tool.plan:
+            plan = self._plan_tool.plan
+            for tc in response.tool_calls:
+                if tc.name == 'plan' and tc.arguments.get('action') == 'update' and tc.arguments.get('status') == 'done':
+                    step_id = tc.arguments.get('step_id', '')
+                    step = plan._get(step_id)
+                    if step:
+                        self.librarian.save_task_context(
+                            plan.goal,
+                            f"Completed step {step_id}: {step.description}\n\nPlan progress:\n{plan.to_prompt()}",
+                        )
 
         if loop_detected:
             self.context.add(

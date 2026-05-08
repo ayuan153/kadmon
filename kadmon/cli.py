@@ -41,12 +41,16 @@ def run(task: str, repo: str, model: str, provider: str, aws_region: str):
     """Run kadmon on a task."""
     from kadmon.tools import build_index, create_default_registry
     from kadmon.agent import AgentLoop
+    from kadmon.memory.librarian import Librarian
+    from kadmon.memory.session_tracker import SessionTracker
 
     llm = _make_provider(provider, model, aws_region)
     repo_path = os.path.abspath(repo)
     db = build_index(repo_path)
     tools = create_default_registry(repo_path, db=db)
-    agent = AgentLoop(provider=llm, tools=tools)
+    librarian = Librarian(repo_path)
+    session_tracker = SessionTracker(repo_path)
+    agent = AgentLoop(provider=llm, tools=tools, librarian=librarian, session_tracker=session_tracker)
     result = agent.run(task)
     db.close()
     if result:
