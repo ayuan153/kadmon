@@ -18,16 +18,16 @@ case "${1:-help}" in
   bench)
     LIMIT="${2:-5}"
     echo "Running $LIMIT Python exercises (profile=$AWS_PROFILE model=$MODEL)"
-    kadmon bench --languages python --limit "$LIMIT" --provider bedrock \
+    python -m kadmon bench --languages python --limit "$LIMIT" --provider bedrock \
       --aws-region "$AWS_REGION" --model "$MODEL"
     ;;
   bench-full)
     echo "Running full polyglot benchmark (225 exercises)"
-    kadmon bench --provider bedrock --aws-region "$AWS_REGION" --model "$MODEL"
+    python -m kadmon bench --provider bedrock --aws-region "$AWS_REGION" --model "$MODEL"
     ;;
   run)
     shift
-    kadmon run --task "$*" --repo . --provider bedrock \
+    python -m kadmon run --task "$*" --repo . --provider bedrock \
       --aws-region "$AWS_REGION" --model "$MODEL"
     ;;
   test)

@@ -93,26 +93,26 @@ cd kadmon
 pip install -e ".[dev]"
 ```
 
-When installed with `-e` (editable), the `kadmon` command points to your local source. Changes take effect immediately — no reinstall needed.
+### Running Your Local Build
+
+Use `python -m kadmon` to run from source. This never conflicts with a globally installed `kadmon`:
 
 ```bash
-# Interactive mode (uses your local build)
-kadmon
+# Interactive mode (local build)
+python -m kadmon
 
 # One-shot mode
-kadmon run --task "Fix the bug in parser.py"
+python -m kadmon run --task "Fix the bug in parser.py"
 
-# Run tests
-./dev test
-
-# Lint
-./dev lint
-
-# Benchmark smoke test
-./dev bench
+# Init
+python -m kadmon init
 ```
 
+The global `kadmon` command (from npm/pip install) always runs the published release. `python -m kadmon` always runs your local checkout.
+
 ### Dev Script
+
+The `./dev` script uses the local build automatically:
 
 ```bash
 ./dev bench [N]     # N Python exercises (default: 5)
@@ -126,10 +126,7 @@ kadmon run --task "Fix the bug in parser.py"
 
 ```bash
 # Run without planning (simpler loop, easier to trace)
-kadmon run --task "Fix the typo" --no-planning
-
-# Run with no streaming (see raw responses)
-kadmon run --task "Fix the typo"
+python -m kadmon run --task "Fix the typo" --no-planning
 
 # Sequential benchmark with live timer per exercise
 kadmon bench --limit 5 -j 1
