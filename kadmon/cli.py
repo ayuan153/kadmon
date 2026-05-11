@@ -38,9 +38,62 @@ def _make_provider(provider: str, model: str, aws_region: str):
         return AnthropicProvider(model=model, api_key=api_key)
 
 
-@click.group()
-def main():
+@click.group(invoke_without_command=True)
+@click.pass_context
+def main(ctx):
     """Kadmon - an LLM coding agent."""
+    if ctx.invoked_subcommand is None:
+        ctx.invoke(chat)
+
+
+@main.command()
+@click.option("--model", default=None, help="Override model")
+@click.option("--provider", default=None, help="Override provider")
+@click.option("--aws-region", default=None, help="AWS region for Bedrock")
+def chat(model, provider, aws_region):
+    """Interactive chat mode (default when no subcommand given)."""
+    from kadmon.memory.librarian import Librarian
+    from kadmon.memory.session_tracker import SessionTracker
+    from kadmon.tools import build_index, create_default_registry
+    from kadmon.agent import AgentLoop
+    from kadmon.human import CLIChannel
+
+    repo_path = os.path.abspath(".")
+    _provider = provider or DEFAULT_PROVIDER
+    _model = model or DEFAULT_MODEL
+    _region = aws_region or DEFAULT_REGION
+
+    llm = _make_provider(_provider, _model, _region)
+    db = build_index(repo_path)
+    tools = create_default_registry(repo_path, db=db)
+    librarian = Librarian(repo_path)
+    session_tracker = SessionTracker(repo_path)
+    channel = CLIChannel()
+
+    click.echo("Kadmon — type your task, then press Enter. Ctrl+C to exit.\n")
+
+    try:
+        while True:
+            task = input("> ").strip()
+            if not task:
+                continue
+            agent = AgentLoop(
+                provider=llm,
+                tools=tools,
+                librarian=librarian,
+                session_tracker=session_tracker,
+                channel=channel,
+                repo_root=repo_path,
+            )
+            result = agent.run(task)
+            if result:
+                click.echo(f"\n{result}\n")
+            else:
+                click.echo("\nDone (no patch produced).\n")
+    except (KeyboardInterrupt, EOFError):
+        click.echo("\nBye.")
+    finally:
+        db.close()
 
 
 @main.command()
@@ -172,29 +225,33 @@ def init():
 
     # 1. Pick provider
     click.echo("Choose your LLM provider:")
-    click.echo("  1. AWS Bedrock (recommended — uses your AWS credentials)")
-    click.echo("  2. Anthropic (direct API key)")
-    click.echo("  3. OpenAI")
-    choice = click.prompt("Provider", type=click.Choice(["1", "2", "3"]), default="1")
+    click.echo("  1. Anthropic (API key)")
+    click.echo("  2. OpenAI (API key)")
+    click.echo("  3. Google Gemini (API key)")
+    click.echo("  4. AWS Bedrock (uses AWS credentials)")
+    choice = click.prompt("Provider", type=click.Choice(["1", "2", "3", "4"]), default="1")
 
-    provider_map = {"1": "bedrock", "2": "anthropic", "3": "openai"}
+    provider_map = {"1": "anthropic", "2": "openai", "3": "gemini", "4": "bedrock"}
     provider = provider_map[choice]
 
     # 2. Configure credentials
     config = {"provider": provider}
 
-    if provider == "bedrock":
-        config["aws_region"] = click.prompt("AWS region", default="us-east-1")
-        config["aws_profile"] = click.prompt(
-            "AWS profile (leave empty for default credentials)", default="", show_default=False
-        )
-        config["model"] = click.prompt("Model", default="us.anthropic.claude-sonnet-4-6")
-    elif provider == "anthropic":
+    if provider == "anthropic":
         config["api_key"] = click.prompt("Anthropic API key", hide_input=True)
         config["model"] = click.prompt("Model", default="claude-sonnet-4-20250514")
     elif provider == "openai":
         config["api_key"] = click.prompt("OpenAI API key", hide_input=True)
         config["model"] = click.prompt("Model", default="gpt-4o")
+    elif provider == "gemini":
+        config["api_key"] = click.prompt("Google API key", hide_input=True)
+        config["model"] = click.prompt("Model", default="gemini-2.5-flash")
+    elif provider == "bedrock":
+        config["aws_region"] = click.prompt("AWS region", default="us-east-1")
+        config["aws_profile"] = click.prompt(
+            "AWS profile (leave empty for default credentials)", default="", show_default=False
+        )
+        config["model"] = click.prompt("Model", default="us.anthropic.claude-sonnet-4-6")
 
     # 3. Test connection
     click.echo("\nTesting connection...")
