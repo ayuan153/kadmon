@@ -1,25 +1,42 @@
 #!/usr/bin/env bash
-# Quick smoke test for kadmon using the 'kadmon' AWS profile.
+# Development script for kadmon.
+# Handles venv, deps, and running the local build.
+#
 # Usage:
-#   ./dev bench              # 5 Python exercises (quick, ~$1)
-#   ./dev bench 20           # 20 Python exercises
-#   ./dev bench-full         # All 225 exercises (~$20)
-#   ./dev run "Fix the bug"  # Run on current repo
-#   ./dev test               # Run unit tests
-#   ./dev lint               # Run linter
+#   ./dev              # Launch interactive kadmon (local build)
+#   ./dev bench        # 5 Python exercises
+#   ./dev bench 20     # 20 Python exercises
+#   ./dev bench-full   # All 225 exercises
+#   ./dev run "task"   # One-shot mode
+#   ./dev test         # Run tests
+#   ./dev lint         # Run linter
+#   ./dev setup        # Force reinstall deps
 
 set -euo pipefail
+cd "$(dirname "$0")"
 
-# Auto-activate venv if it exists
-if [ -f ".venv/bin/activate" ]; then
-  source .venv/bin/activate
+# --- Ensure venv + deps ---
+if [ ! -f ".venv/bin/activate" ]; then
+  echo "Creating virtual environment..."
+  python3 -m venv .venv
+fi
+source .venv/bin/activate
+if [ ! -f ".venv/.installed" ] || [ pyproject.toml -nt ".venv/.installed" ]; then
+  echo "Installing dependencies..."
+  pip install -e ".[dev]" --quiet
+  touch .venv/.installed
 fi
 
+# --- Config ---
 export AWS_PROFILE="${AWS_PROFILE:-kadmon}"
 export AWS_REGION="${AWS_REGION:-us-east-1}"
 MODEL="${KADMON_MODEL:-us.anthropic.claude-sonnet-4-6}"
 
-case "${1:-help}" in
+# --- Commands ---
+case "${1:-kadmon}" in
+  kadmon|chat)
+    python -m kadmon
+    ;;
   bench)
     LIMIT="${2:-5}"
     echo "Running $LIMIT Python exercises (profile=$AWS_PROFILE model=$MODEL)"
@@ -41,19 +58,30 @@ case "${1:-help}" in
   lint)
     ruff check kadmon/ tests/
     ;;
-  help|*)
-    echo "Usage: ./dev <command>"
+  setup)
+    pip install -e ".[dev]"
+    touch .venv/.installed
+    echo "✓ Dependencies installed."
+    ;;
+  help|--help|-h)
+    echo "Usage: ./dev [command]"
     echo ""
     echo "Commands:"
+    echo "  (none)          Launch interactive kadmon"
     echo "  bench [N]       Run N Python exercises [default: 5]"
     echo "  bench-full      Run all 225 exercises"
-    echo "  run \"task\"      Run kadmon on current repo"
-    echo "  test            Run unit tests"
-    echo "  lint            Run ruff linter"
+    echo "  run \"task\"      One-shot mode"
+    echo "  test            Run tests"
+    echo "  lint            Run linter"
+    echo "  setup           Force reinstall dependencies"
     echo ""
     echo "Environment:"
-    echo "  AWS_PROFILE   AWS profile [default: kadmon]"
-    echo "  AWS_REGION    AWS region [default: us-east-1]"
-    echo "  KADMON_MODEL  Model ID [default: us.anthropic.claude-sonnet-4-6]"
+    echo "  AWS_PROFILE     [default: kadmon]"
+    echo "  AWS_REGION      [default: us-east-1]"
+    echo "  KADMON_MODEL    [default: us.anthropic.claude-sonnet-4-6]"
+    ;;
+  *)
+    # Pass anything else through to kadmon
+    python -m kadmon "$@"
     ;;
 esac

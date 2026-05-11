@@ -87,57 +87,26 @@ The agent automatically:
 
 ## Local Development
 
-### Setup (one-time)
-
 ```bash
 git clone https://github.com/ayuan153/kadmon.git
 cd kadmon
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
+./dev
 ```
 
-This creates an isolated virtual environment. Your local kadmon and its dependencies live in `.venv/` — no side effects on your system Python or any globally installed `kadmon`.
-
-### Running Your Local Build
-
-Always activate the venv first:
+That's it. `./dev` handles everything: creates a venv, installs dependencies, and launches kadmon from your local source. First run takes ~30s for setup, subsequent runs are instant.
 
 ```bash
-source .venv/bin/activate    # do this once per terminal session
-python -m kadmon             # interactive chat (local build)
-python -m kadmon init        # setup
-python -m kadmon run --task "Fix the bug"  # one-shot
+./dev              # Launch interactive kadmon (local build)
+./dev bench        # 5 Python exercises
+./dev bench 20     # 20 exercises
+./dev bench-full   # All 225 exercises, 6 languages
+./dev run "task"   # One-shot mode
+./dev test         # Run tests
+./dev lint         # Run linter
+./dev setup        # Force reinstall deps
 ```
 
-Or use the dev script (activates venv automatically):
-
-```bash
-./dev bench [N]     # N Python exercises (default: 5)
-./dev bench-full    # All 225 exercises, 6 languages
-./dev run "task"    # One-shot on current repo
-./dev test          # pytest
-./dev lint          # ruff
-```
-
-### Local Build vs Published Release
-
-| I want to... | Command | What runs |
-|---|---|---|
-| Use published release | `kadmon` (from npm/pip global install) | Latest release |
-| Develop + test locally | `source .venv/bin/activate && python -m kadmon` | Your local source |
-
-No conflicts — the venv isolates your dev environment completely.
-
-### Debugging Tips
-
-```bash
-# Simpler loop (no planning), easier to trace
-python -m kadmon run --task "Fix the typo" --no-planning
-
-# Sequential benchmark with live timer per exercise
-python -m kadmon bench --limit 5 -j 1
-```
+The global `kadmon` command (from `npm install -g kadmon`) runs the published release. `./dev` always runs your local source. No conflicts.
 
 ## Benchmarking
 
