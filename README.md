@@ -19,35 +19,40 @@ pip install kadmon
 kadmon init
 ```
 
-This walks you through provider setup interactively. Or configure manually:
+This walks you through provider setup interactively. Then just:
 
-### Anthropic
+```bash
+cd your-project
+kadmon
+```
 
+Type your task, kadmon works, streams output as it goes. Ctrl+C to exit.
+
+### Provider Setup (manual alternative to `kadmon init`)
+
+**Anthropic:**
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
-kadmon run --task "Fix the bug" --provider anthropic
+kadmon --provider anthropic
 ```
 
-### AWS Bedrock
-
-```bash
-export AWS_PROFILE=your-profile   # or any standard AWS cred method
-export AWS_REGION=us-east-1
-kadmon run --task "Fix the bug" --provider bedrock
-```
-
-### OpenAI
-
+**OpenAI:**
 ```bash
 export OPENAI_API_KEY=sk-...
-kadmon run --task "Fix the bug" --provider openai
+kadmon --provider openai
 ```
 
-### Google Gemini
-
+**Google Gemini:**
 ```bash
 export GOOGLE_API_KEY=...
-kadmon run --task "Fix the bug" --provider gemini
+kadmon --provider gemini
+```
+
+**AWS Bedrock:**
+```bash
+export AWS_PROFILE=your-profile
+export AWS_REGION=us-east-1
+kadmon --provider bedrock
 ```
 
 Config is saved to `.kadmon/config.toml` after `kadmon init` — you only set this up once per project.
@@ -83,10 +88,19 @@ The agent automatically:
 ## Local Development
 
 ```bash
-# Clone and install in dev mode
 git clone https://github.com/ayuan153/kadmon.git
 cd kadmon
 pip install -e ".[dev]"
+```
+
+When installed with `-e` (editable), the `kadmon` command points to your local source. Changes take effect immediately — no reinstall needed.
+
+```bash
+# Interactive mode (uses your local build)
+kadmon
+
+# One-shot mode
+kadmon run --task "Fix the bug in parser.py"
 
 # Run tests
 ./dev test
@@ -94,37 +108,31 @@ pip install -e ".[dev]"
 # Lint
 ./dev lint
 
-# Run kadmon against a local repo
-./dev run "Fix the bug in parser.py"
-
-# Benchmark (5 Python exercises, quick smoke test)
+# Benchmark smoke test
 ./dev bench
-
-# Full benchmark (225 exercises, all languages)
-./dev bench-full
 ```
 
-### Dev Script Reference
+### Dev Script
 
 ```bash
 ./dev bench [N]     # N Python exercises (default: 5)
 ./dev bench-full    # All 225 exercises, 6 languages
-./dev run "task"    # Run kadmon on current repo
+./dev run "task"    # One-shot on current repo
 ./dev test          # pytest
 ./dev lint          # ruff
 ```
 
-### Running Against Your Own Code
+### Debugging Tips
 
 ```bash
-# From any repo:
-kadmon run --task "Add input validation to the create_user endpoint"
+# Run without planning (simpler loop, easier to trace)
+kadmon run --task "Fix the typo" --no-planning
 
-# With planning disabled (faster, simpler loop — good for debugging):
-kadmon run --task "Fix the typo in README.md" --no-planning
+# Run with no streaming (see raw responses)
+kadmon run --task "Fix the typo"
 
-# In yolo mode (no tool approval gates):
-kadmon run --task "Refactor the auth module" --mode yolo
+# Sequential benchmark with live timer per exercise
+kadmon bench --limit 5 -j 1
 ```
 
 ## Benchmarking
