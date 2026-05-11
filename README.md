@@ -5,49 +5,52 @@ An autonomous coding agent that manages its own context, asks clarifying questio
 ## Install
 
 ```bash
+npm install -g kadmon
+```
+
+Or with pip:
+```bash
 pip install kadmon
 ```
 
 ## Getting Started
 
 ```bash
-# Interactive setup — picks your provider, configures credentials, tests the connection
 kadmon init
-
-# Run on a repo
-cd your-project
-kadmon run --task "Fix the failing test in test_auth.py"
 ```
 
-`kadmon init` walks you through:
-1. Choose provider (Bedrock, Anthropic, OpenAI)
-2. Configure credentials (AWS profile, API key, etc.)
-3. Test the connection
-4. Save to `.kadmon/config.toml`
+This walks you through provider setup interactively. Or configure manually:
 
-### Manual Provider Setup
+### Anthropic
 
-If you prefer to skip `kadmon init`:
-
-**AWS Bedrock** (default):
-```bash
-# Any standard AWS credential method works (SSO, env vars, profiles)
-export AWS_PROFILE=your-profile
-export AWS_REGION=us-east-1
-kadmon run --task "..." --provider bedrock --model us.anthropic.claude-sonnet-4-6
-```
-
-**Anthropic Direct**:
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
-kadmon run --task "..." --provider anthropic --model claude-sonnet-4-20250514
+kadmon run --task "Fix the bug" --provider anthropic
 ```
 
-**OpenAI**:
+### AWS Bedrock
+
+```bash
+export AWS_PROFILE=your-profile   # or any standard AWS cred method
+export AWS_REGION=us-east-1
+kadmon run --task "Fix the bug" --provider bedrock
+```
+
+### OpenAI
+
 ```bash
 export OPENAI_API_KEY=sk-...
-kadmon run --task "..." --provider openai --model gpt-4o
+kadmon run --task "Fix the bug" --provider openai
 ```
+
+### Google Gemini
+
+```bash
+export GOOGLE_API_KEY=...
+kadmon run --task "Fix the bug" --provider gemini
+```
+
+Config is saved to `.kadmon/config.toml` after `kadmon init` — you only set this up once per project.
 
 ## What Makes Kadmon Different
 
