@@ -222,6 +222,83 @@ def bench(languages, limit, output, model, provider, aws_region, setup, workers)
 
 
 @main.command()
+@click.option("--repo", default=".", type=click.Path(exists=True), help="Repository path")
+def status(repo: str):
+    """Show current session state and library summary."""
+    from kadmon.memory.session_tracker import SessionTracker
+
+    repo_path = os.path.abspath(repo)
+    kadmon_dir = Path(repo_path) / ".kadmon"
+
+    if not kadmon_dir.exists():
+        click.echo("No .kadmon directory found. Run 'kadmon init' or start a task first.")
+        return
+
+    # --- Session status ---
+    tracker = SessionTracker(repo_path)
+    session = tracker.load()
+
+    click.echo("\n=== Kadmon Status ===\n")
+
+    if session is None:
+        click.echo("Session:   no active session")
+    else:
+        status_icon = {"in_progress": "⏳", "completed": "✓", "handed_off": "↗"}.get(
+            session.status, session.status
+        )
+        click.echo(f"Session:   {session.session_id}  [{status_icon} {session.status}]")
+        click.echo(f"Started:   {session.started}")
+        click.echo(f"Task:      {session.task}")
+
+        delegations = session.delegations
+        if delegations:
+            click.echo(f"\nDelegations ({len(delegations)}):")
+            for d in delegations:
+                icon = {"completed": "✓", "failed": "✗", "in_progress": "⏳"}.get(d.status, d.status)
+                line = f"  {icon} [{d.id}] {d.task}"
+                if d.summary:
+                    line += f"\n       → {d.summary}"
+                click.echo(line)
+        else:
+            click.echo("\nDelegations: none")
+
+    # --- Library summary ---
+    library_path = kadmon_dir / "library"
+    click.echo("")
+    if not library_path.exists():
+        click.echo("Library:   empty (no .kadmon/library/ yet)")
+    else:
+        index_path = library_path / "index.md"
+        if index_path.exists() and index_path.stat().st_size > 0:
+            click.echo("Library:")
+            for line in index_path.read_text().splitlines():
+                if line.strip() and not line.startswith("#"):
+                    click.echo(f"  {line.strip()}")
+        else:
+            files = list(library_path.glob("*.md"))
+            if files:
+                click.echo(f"Library:   {len(files)} file(s) in .kadmon/library/")
+            else:
+                click.echo("Library:   empty")
+
+        # Session history count
+        sessions_dir = kadmon_dir / "sessions"
+        if sessions_dir.exists():
+            count = len(list(sessions_dir.glob("*.json")))
+            if count:
+                click.echo(f"\nHistory:   {count} archived session(s) in .kadmon/sessions/")
+
+    # --- Session history (always check, independent of library) ---
+    sessions_dir = kadmon_dir / "sessions"
+    if sessions_dir.exists():
+        count = len(list(sessions_dir.glob("*.json")))
+        if count:
+            click.echo(f"\nHistory:   {count} archived session(s)")
+
+    click.echo("")
+
+
+@main.command()
 def init():
     """Interactive setup — configure provider, credentials, and test connection."""
     click.echo("\n✨ Kadmon Setup\n")
