@@ -57,6 +57,7 @@ def chat(model, provider, aws_region):
     from kadmon.tools import build_index, create_default_registry
     from kadmon.agent import AgentLoop
     from kadmon.human import CLIChannel
+    from kadmon.cli_display import StreamDisplay
 
     repo_path = os.path.abspath(".")
     _provider = provider or DEFAULT_PROVIDER
@@ -69,6 +70,7 @@ def chat(model, provider, aws_region):
     librarian = Librarian(repo_path)
     session_tracker = SessionTracker(repo_path)
     channel = CLIChannel()
+    display = StreamDisplay()
 
     click.echo("Kadmon — type your task, then press Enter. Ctrl+C to exit.\n")
 
@@ -84,12 +86,13 @@ def chat(model, provider, aws_region):
                 session_tracker=session_tracker,
                 channel=channel,
                 repo_root=repo_path,
+                display=display,
             )
             result = agent.run(task)
             if result:
-                click.echo(f"\n{result}\n")
+                click.echo("")
             else:
-                click.echo("\nDone (no patch produced).\n")
+                click.echo("\nDone.\n")
     except (KeyboardInterrupt, EOFError):
         click.echo("\nBye.")
     finally:

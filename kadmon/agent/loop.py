@@ -42,6 +42,7 @@ class AgentLoop:
         mode: str = "cautious",
         channel: HumanChannel | None = None,
         repo_root: str = ".",
+        display=None,
     ):
         self.provider = provider
         self.tools = tools
@@ -50,6 +51,7 @@ class AgentLoop:
         self.librarian = librarian
         self.session_tracker = session_tracker
         self.mode = mode
+        self.display = display
         self.context = ContextManager()
         self.loop_detector = LoopDetector()
         # Handoff system (autonomous context management)
@@ -100,8 +102,7 @@ class AgentLoop:
         architect_budget = self.max_iterations // 3  # ~1/3 budget for planning
 
         for _ in range(architect_budget):
-            response = self.provider.complete(
-                messages=self.context.to_messages(),
+            response = self._call_llm(
                 tools=self._filtered_tools(ARCHITECT_TOOLS),
                 system=ARCHITECT_PROMPT,
             )
@@ -122,8 +123,7 @@ class AgentLoop:
             self.context.add(Message(role="user", content=plan_msg))
 
         for _ in range(editor_budget):
-            response = self.provider.complete(
-                messages=self.context.to_messages(),
+            response = self._call_llm(
                 tools=self._filtered_tools(EDITOR_TOOLS),
                 system=EDITOR_PROMPT,
             )
@@ -141,8 +141,7 @@ class AgentLoop:
         self.context.add(Message(role="user", content=task))
 
         for _ in range(self.max_iterations):
-            response = self.provider.complete(
-                messages=self.context.to_messages(),
+            response = self._call_llm(
                 tools=self.tools.definitions(),
                 system=SYSTEM_PROMPT,
             )
@@ -184,6 +183,8 @@ class AgentLoop:
             result = self.tools.execute(tc.name, **tc.arguments)
 
             if tc.name == "submit" and not result.error:
+                if self.display:
+                    self.display.show_submit(result.output)
                 if self.session_tracker:
                     self.session_tracker.complete_session()
                 if self.librarian:
@@ -197,6 +198,9 @@ class AgentLoop:
                 loop_detected = True
             if result.error and self.loop_detector.record_error(result.output):
                 loop_detected = True
+
+            if self.display and tc.name != "submit":
+                self.display.show_tool_result(tc.name, result.output, result.error)
 
             tool_results.append(
                 {
@@ -249,6 +253,23 @@ class AgentLoop:
         self.context.add(Message(role="user", content=resume_prompt))
         self._handoff_monitor.reset()
         return True
+
+    def _call_llm(self, tools: list[dict], system: str):
+        """Call LLM with streaming if display is set, otherwise use complete()."""
+        if self.display and hasattr(self.provider, "stream"):
+            from kadmon.providers.base import StreamEvent
+
+            response = None
+            for chunk in self.provider.stream(
+                messages=self.context.to_messages(), tools=tools, system=system
+            ):
+                self.display.handle(chunk)
+                if chunk.event == StreamEvent.DONE:
+                    response = chunk.response
+            return response
+        return self.provider.complete(
+            messages=self.context.to_messages(), tools=tools, system=system
+        )
 
     def _filtered_tools(self, allowed: set[str]) -> list[dict]:
         """Return tool definitions filtered to the allowed set."""
