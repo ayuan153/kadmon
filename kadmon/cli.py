@@ -12,6 +12,22 @@ def _make_provider(provider: str, model: str, aws_region: str):
         from kadmon.providers.bedrock import BedrockProvider
 
         return BedrockProvider(model=model, aws_region=aws_region)
+    elif provider == "openai":
+        from kadmon.providers.openai_provider import OpenAIProvider
+
+        api_key = os.environ.get("OPENAI_API_KEY", "")
+        if not api_key:
+            click.echo("Error: OPENAI_API_KEY not set", err=True)
+            raise SystemExit(1)
+        return OpenAIProvider(model=model, api_key=api_key)
+    elif provider == "gemini":
+        from kadmon.providers.gemini import GeminiProvider
+
+        api_key = os.environ.get("GOOGLE_API_KEY", "")
+        if not api_key:
+            click.echo("Error: GOOGLE_API_KEY not set", err=True)
+            raise SystemExit(1)
+        return GeminiProvider(model=model, api_key=api_key)
     else:
         from kadmon.providers.anthropic import AnthropicProvider
 
@@ -33,7 +49,7 @@ def main():
 @click.option("--model", default=DEFAULT_MODEL, type=str, help="Model to use")
 @click.option(
     "--provider",
-    type=click.Choice(["anthropic", "bedrock"]),
+    type=click.Choice(["anthropic", "bedrock", "openai", "gemini"]),
     default=DEFAULT_PROVIDER,
     help="LLM provider",
 )
@@ -116,7 +132,7 @@ def eval_cmd(dataset, limit, output, model):
 @click.option("--limit", type=int, default=None, help="Max exercises to run")
 @click.option("--output", default="eval_results/polyglot", help="Output directory")
 @click.option("--model", default=DEFAULT_MODEL)
-@click.option("--provider", type=click.Choice(["anthropic", "bedrock"]), default=DEFAULT_PROVIDER)
+@click.option("--provider", type=click.Choice(["anthropic", "bedrock", "openai", "gemini"]), default=DEFAULT_PROVIDER)
 @click.option("--aws-region", default=DEFAULT_REGION)
 @click.option("--setup/--no-setup", default=True, help="Clone exercism repos if needed")
 @click.option("--workers", "-j", type=int, default=4, help="Parallel workers (default: 4)")
