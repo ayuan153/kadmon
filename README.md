@@ -87,32 +87,30 @@ The agent automatically:
 
 ## Local Development
 
+### Setup (one-time)
+
 ```bash
 git clone https://github.com/ayuan153/kadmon.git
 cd kadmon
+python -m venv .venv
+source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
+This creates an isolated virtual environment. Your local kadmon and its dependencies live in `.venv/` — no side effects on your system Python or any globally installed `kadmon`.
+
 ### Running Your Local Build
 
-Use `python -m kadmon` to run from source. This never conflicts with a globally installed `kadmon`:
+Always activate the venv first:
 
 ```bash
-# Interactive mode (local build)
-python -m kadmon
-
-# One-shot mode
-python -m kadmon run --task "Fix the bug in parser.py"
-
-# Init
-python -m kadmon init
+source .venv/bin/activate    # do this once per terminal session
+python -m kadmon             # interactive chat (local build)
+python -m kadmon init        # setup
+python -m kadmon run --task "Fix the bug"  # one-shot
 ```
 
-The global `kadmon` command (from npm/pip install) always runs the published release. `python -m kadmon` always runs your local checkout.
-
-### Dev Script
-
-The `./dev` script uses the local build automatically:
+Or use the dev script (activates venv automatically):
 
 ```bash
 ./dev bench [N]     # N Python exercises (default: 5)
@@ -122,14 +120,23 @@ The `./dev` script uses the local build automatically:
 ./dev lint          # ruff
 ```
 
+### Local Build vs Published Release
+
+| I want to... | Command | What runs |
+|---|---|---|
+| Use published release | `kadmon` (from npm/pip global install) | Latest release |
+| Develop + test locally | `source .venv/bin/activate && python -m kadmon` | Your local source |
+
+No conflicts — the venv isolates your dev environment completely.
+
 ### Debugging Tips
 
 ```bash
-# Run without planning (simpler loop, easier to trace)
+# Simpler loop (no planning), easier to trace
 python -m kadmon run --task "Fix the typo" --no-planning
 
 # Sequential benchmark with live timer per exercise
-kadmon bench --limit 5 -j 1
+python -m kadmon bench --limit 5 -j 1
 ```
 
 ## Benchmarking

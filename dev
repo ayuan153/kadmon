@@ -10,6 +10,11 @@
 
 set -euo pipefail
 
+# Auto-activate venv if it exists
+if [ -f ".venv/bin/activate" ]; then
+  source .venv/bin/activate
+fi
+
 export AWS_PROFILE="${AWS_PROFILE:-kadmon}"
 export AWS_REGION="${AWS_REGION:-us-east-1}"
 MODEL="${KADMON_MODEL:-us.anthropic.claude-sonnet-4-6}"
