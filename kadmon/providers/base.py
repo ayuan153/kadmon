@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Protocol
 
 
@@ -17,10 +18,10 @@ class TokenUsage:
 
 @dataclass
 class LLMResponse:
-    content: str = ''
+    content: str = ""
     tool_calls: list[ToolCall] = field(default_factory=list)
     usage: TokenUsage = field(default_factory=TokenUsage)
-    stop_reason: str = ''
+    stop_reason: str = ""
 
 
 @dataclass
@@ -29,5 +30,25 @@ class Message:
     content: str | list  # str for text, list for tool results
 
 
+class StreamEvent(str, Enum):
+    TEXT_DELTA = "text_delta"
+    TOOL_START = "tool_start"
+    TOOL_DELTA = "tool_delta"
+    TOOL_END = "tool_end"
+    DONE = "done"
+
+
+@dataclass
+class StreamChunk:
+    event: StreamEvent
+    text: str = ""
+    tool_name: str = ""
+    tool_id: str = ""
+    # Final response (only on DONE event)
+    response: LLMResponse | None = None
+
+
 class LLMProvider(Protocol):
-    def complete(self, messages: list[Message], tools: list[dict] | None = None, system: str = '') -> LLMResponse: ...
+    def complete(
+        self, messages: list[Message], tools: list[dict] | None = None, system: str = ""
+    ) -> LLMResponse: ...
