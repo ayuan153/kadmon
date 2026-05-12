@@ -26,8 +26,10 @@ ARCHITECT_TOOLS = {
     "plan",
     "shell",
     "ask_human",
+    "library_read",
+    "library_status",
 }
-EDITOR_TOOLS = {"read_file", "edit_file", "write_file", "shell", "submit", "plan", "ask_human"}
+EDITOR_TOOLS = {"read_file", "edit_file", "write_file", "shell", "submit", "plan", "ask_human", "library_write"}
 
 
 class AgentLoop:
@@ -75,18 +77,6 @@ class AgentLoop:
 
     def run(self, task: str) -> str:
         """Run the agent loop. Returns the final patch or empty string."""
-        # Cold start: inject library context
-        if self.librarian:
-            library_context = self.librarian.load_relevant(task)
-            if library_context:
-                self.context.add(Message(role="user", content=library_context))
-                self.context.add(
-                    Message(
-                        role="assistant",
-                        content="I've loaded the project context from the library. I'll use this knowledge as I work on the task.",
-                    )
-                )
-
         # Start session tracking
         if self.session_tracker:
             self.session_tracker.start(task)
@@ -157,7 +147,7 @@ class AgentLoop:
             self.context.add(Message(role="assistant", content=response.content))
             # Must end with user message for next API call
             self.context.add(
-                Message(role="user", content="Continue with the task. Use tools to make progress.")
+                Message(role="user", content="[System: if you have completed your response, call submit. If you need to do more work, use tools. If you are waiting for user input, call ask_human.]")
             )
             return None
 
