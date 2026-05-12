@@ -4,14 +4,17 @@ from kadmon.index.updater import IndexUpdater
 from kadmon.memory.read_cache import ReadCache
 from kadmon.tools.base import Tool as Tool, ToolResult as ToolResult, ToolRegistry as ToolRegistry
 from kadmon.tools.file_io import ReadFileTool, WriteFileTool, EditFileTool, ListDirTool
+from kadmon.tools.library import LibraryReadTool, LibraryWriteTool, LibraryStatusTool
 from kadmon.tools.references import FindReferencesTool, FindDefinitionTool
 from kadmon.tools.search import GrepSearchTool
 from kadmon.tools.shell import ShellTool
 from kadmon.tools.skeleton import FileSkeletonTool
 from kadmon.tools.submit import SubmitTool
 
+from kadmon.providers.base import LLMProvider
 
-def create_default_registry(repo_root: str, db: SymbolDB | None = None) -> ToolRegistry:
+
+def create_default_registry(repo_root: str, db: SymbolDB | None = None, provider: LLMProvider | None = None) -> ToolRegistry:
     registry = ToolRegistry()
     cache = ReadCache()
     registry.register(ReadFileTool(repo_root, read_cache=cache))
@@ -25,6 +28,14 @@ def create_default_registry(repo_root: str, db: SymbolDB | None = None) -> ToolR
     if db:
         registry.register(FindReferencesTool(db))
         registry.register(FindDefinitionTool(db))
+    if provider:
+        read_tool = LibraryReadTool(provider, repo_root)
+        write_tool = LibraryWriteTool(provider, repo_root)
+        registry.register(read_tool)
+        registry.register(write_tool)
+        registry.register(LibraryStatusTool(repo_root, read_tracker=read_tool.tracker, write_tracker=write_tool.tracker))
+    else:
+        registry.register(LibraryStatusTool(repo_root))
     return registry
 
 

@@ -66,7 +66,7 @@ def chat(model, provider, aws_region):
 
     llm = _make_provider(_provider, _model, _region)
     db = build_index(repo_path)
-    tools = create_default_registry(repo_path, db=db)
+    tools = create_default_registry(repo_path, db=db, provider=llm)
     librarian = Librarian(repo_path)
     session_tracker = SessionTracker(repo_path)
     channel = CLIChannel()
@@ -74,6 +74,7 @@ def chat(model, provider, aws_region):
 
     click.echo("Kadmon — type your task, then press Enter. Ctrl+C to exit.\n")
 
+    task = ""
     try:
         while True:
             task = input("> ").strip()
@@ -93,10 +94,72 @@ def chat(model, provider, aws_region):
                 click.echo("")
             else:
                 click.echo("\nDone.\n")
-    except (KeyboardInterrupt, EOFError):
+    except KeyboardInterrupt:
+        click.echo("\nSaving session...")
+        library_path = Path(repo_path) / ".kadmon" / "library"
+        sessions_dir = library_path / "sessions"
+        sessions_dir.mkdir(parents=True, exist_ok=True)
+        current_path = sessions_dir / "current.md"
+        if task:
+            current_path.write_text(f"# Interrupted Session\n\nLast task: {task}\n")
+        click.echo("Session saved. Use 'kadmon continue' to resume.")
+    except EOFError:
         click.echo("\nBye.")
     finally:
         db.close()
+
+
+@main.command("continue")
+@click.option("--model", default=None, help="Override model")
+@click.option("--provider", default=None, help="Override provider")
+@click.option("--aws-region", default=None, help="AWS region for Bedrock")
+def continue_session(model, provider, aws_region):
+    """Resume the previous task from sessions/current.md."""
+    from kadmon.memory.librarian import Librarian
+    from kadmon.memory.session_tracker import SessionTracker
+    from kadmon.tools import build_index, create_default_registry
+    from kadmon.agent import AgentLoop
+    from kadmon.human import CLIChannel
+    from kadmon.cli_display import StreamDisplay
+
+    repo_path = os.path.abspath(".")
+    _provider = provider or DEFAULT_PROVIDER
+    _model = model or DEFAULT_MODEL
+    _region = aws_region or DEFAULT_REGION
+
+    library_path = Path(repo_path) / ".kadmon" / "library"
+    current_path = library_path / "sessions" / "current.md"
+
+    if not current_path.exists() or not current_path.read_text().strip():
+        click.echo("No saved session found. Nothing to continue.")
+        raise SystemExit(1)
+
+    task = current_path.read_text()
+    click.echo("Resuming session...\n")
+
+    llm = _make_provider(_provider, _model, _region)
+    db = build_index(repo_path)
+    tools = create_default_registry(repo_path, db=db, provider=llm)
+    librarian = Librarian(repo_path)
+    session_tracker = SessionTracker(repo_path)
+    channel = CLIChannel()
+    display = StreamDisplay()
+
+    agent = AgentLoop(
+        provider=llm,
+        tools=tools,
+        librarian=librarian,
+        session_tracker=session_tracker,
+        channel=channel,
+        repo_root=repo_path,
+        display=display,
+    )
+    result = agent.run(task)
+    db.close()
+    if result:
+        click.echo(result)
+    else:
+        click.echo("\nDone.\n")
 
 
 @main.command()
@@ -127,7 +190,7 @@ def run(task: str, repo: str, model: str, provider: str, aws_region: str, mode: 
     llm = _make_provider(provider, model, aws_region)
     repo_path = os.path.abspath(repo)
     db = build_index(repo_path)
-    tools = create_default_registry(repo_path, db=db)
+    tools = create_default_registry(repo_path, db=db, provider=llm)
     librarian = Librarian(repo_path)
     session_tracker = SessionTracker(repo_path)
     channel = CLIChannel() if mode != "yolo" else None
