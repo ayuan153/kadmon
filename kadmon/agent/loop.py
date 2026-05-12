@@ -8,6 +8,7 @@ from kadmon.agent.context import ContextManager
 from kadmon.agent.prompts import SYSTEM_PROMPT, ARCHITECT_PROMPT, EDITOR_PROMPT
 from kadmon.agent.recovery import LoopDetector
 from kadmon.tools.plan import PlanTool
+from kadmon.memory.session_log import SessionLogger
 
 if TYPE_CHECKING:
     from kadmon.human.channel import HumanChannel
@@ -69,6 +70,8 @@ class AgentLoop:
         # Register plan tool
         self._plan_tool = PlanTool()
         self.tools.register(self._plan_tool)
+        # Session logger (append-only JSONL)
+        self._session_logger = SessionLogger(repo_root)
         # Register ask_human tool when channel provided (ambiguity resolution, not permission)
         if channel:
             from kadmon.tools.ask_human import AskHumanTool
@@ -80,6 +83,7 @@ class AgentLoop:
         # Start session tracking
         if self.session_tracker:
             self.session_tracker.start(task)
+        self._session_logger.session_start(task)
 
         if self.use_planning:
             return self._run_with_planning(task)
@@ -101,6 +105,10 @@ class AgentLoop:
                 return done
             # If plan was created, switch to editor phase
             if self._plan_tool.plan and self._plan_tool.plan.steps:
+                self._session_logger.plan_created(
+                    self._plan_tool.plan.goal,
+                    [s.description for s in self._plan_tool.plan.steps],
+                )
                 break
 
         # Phase 2: Editor (uses remaining budget)
@@ -124,6 +132,7 @@ class AgentLoop:
             if self._check_handoff():
                 continue  # Context was reset, loop continues with fresh state
 
+        self._session_logger.session_end("max_iterations")
         return ""
 
     def _run_simple(self, task: str) -> str:
@@ -139,6 +148,7 @@ class AgentLoop:
             if done:
                 return done
 
+        self._session_logger.session_end("max_iterations")
         return ""
 
     def _process_response(self, response) -> str | None:
@@ -171,8 +181,10 @@ class AgentLoop:
         loop_detected = False
         for tc in response.tool_calls:
             result = self.tools.execute(tc.name, **tc.arguments)
+            self._session_logger.tool_executed(tc.name, tc.arguments, not result.error)
 
             if tc.name == "submit" and not result.error:
+                self._session_logger.session_end("completed")
                 if self.display:
                     self.display.show_submit(result.output)
                 if self.session_tracker:
@@ -212,6 +224,11 @@ class AgentLoop:
                     and tc.arguments.get("action") == "update"
                     and tc.arguments.get("status") == "done"
                 ):
+                    self._session_logger.step_completed(
+                        step_id=tc.arguments.get("step_id", ""),
+                        status=tc.arguments.get("status", ""),
+                        notes=tc.arguments.get("notes", ""),
+                    )
                     step_id = tc.arguments.get("step_id", "")
                     step = plan._get(step_id)
                     if step:
