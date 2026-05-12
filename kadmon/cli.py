@@ -286,8 +286,25 @@ def bench(languages, limit, output, model, provider, aws_region, setup, workers)
 
 @main.command()
 @click.option("--repo", default=".", type=click.Path(exists=True), help="Repository path")
-def status(repo: str):
+@click.option("--global", "show_global", is_flag=True, help="Show sessions across all projects")
+def status(repo: str, show_global: bool):
     """Show current session state and library summary."""
+    if show_global:
+        from kadmon.memory.central_index import CentralIndex
+        index = CentralIndex()
+        sessions = index.list_recent(days=14)
+        if not sessions:
+            click.echo("No recent sessions found across projects.")
+            return
+        click.echo("\n=== Recent Sessions (last 14 days) ===\n")
+        for s in sessions:
+            status_icon = {"in_progress": "⏳", "completed": "✓", "handed_off": "↗"}.get(s.status, s.status)
+            click.echo(f"  {status_icon} [{s.session_key}] {s.task}")
+            click.echo(f"    Repo: {s.repo}")
+            click.echo(f"    Updated: {s.last_updated}")
+            click.echo("")
+        return
+
     from kadmon.memory.session_tracker import SessionTracker
 
     repo_path = os.path.abspath(repo)

@@ -6,6 +6,8 @@ import uuid
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 
+from kadmon.memory.central_index import CentralIndex
+
 
 @dataclass
 class Delegation:
@@ -37,6 +39,8 @@ class SessionTracker:
         self.sessions_dir = self.kadmon_dir / "sessions"
         self.sessions_dir.mkdir(exist_ok=True)
         self._session: Session | None = None
+        self._central_index = CentralIndex()
+        self._repo_root = repo_root
 
     def start(self, task: str) -> Session:
         """Start a new session. Archives any existing session first."""
@@ -49,6 +53,11 @@ class SessionTracker:
             task=task,
         )
         self._save()
+        self._central_index.add_entry(
+            session_key=self._session.session_id,
+            repo=self._repo_root,
+            task=task,
+        )
         return self._session
 
     def load(self) -> Session | None:
@@ -111,6 +120,7 @@ class SessionTracker:
         if self._session:
             self._session.status = "completed"
             self._save()
+            self._central_index.update_entry(self._session.session_id, "completed")
             self._archive_session()
 
     def mark_handed_off(self):
@@ -118,6 +128,7 @@ class SessionTracker:
         if self._session:
             self._session.status = "handed_off"
             self._save()
+            self._central_index.update_entry(self._session.session_id, "handed_off")
             self._archive_session()
 
     def get_interrupted_delegations(self) -> list[Delegation]:
