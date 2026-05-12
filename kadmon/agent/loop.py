@@ -55,6 +55,7 @@ class AgentLoop:
         self.session_tracker = session_tracker
         self.mode = mode
         self.display = display
+        self._repo_root = repo_root
         self.context = ContextManager()
         self.loop_detector = LoopDetector()
         # Handoff system (autonomous context management)
@@ -80,6 +81,11 @@ class AgentLoop:
 
     def run(self, task: str) -> str:
         """Run the agent loop. Returns the final patch or empty string."""
+        # Curate stale session log from previous run (cold start fallback)
+        if self.librarian and self._session_logger.read_events():
+            from kadmon.memory.agents.curator_agent import CuratorAgent
+            CuratorAgent(self.provider, self._repo_root).curate()
+
         # Start session tracking
         if self.session_tracker:
             self.session_tracker.start(task)
@@ -194,6 +200,10 @@ class AgentLoop:
                         self._plan_tool.plan.goal if self._plan_tool.plan else "task",
                         "Task completed. Patch submitted.",
                     )
+                # Curate session log into library
+                if self.librarian:
+                    from kadmon.memory.agents.curator_agent import CuratorAgent
+                    CuratorAgent(self.provider, self._repo_root).curate()
                 return result.output
 
             if self.loop_detector.record_action(tc.name, tc.arguments):
