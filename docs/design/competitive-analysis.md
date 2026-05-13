@@ -60,17 +60,17 @@ The insight: users don't want to approve `mkdir` and `git add`. They want to app
 
 ## Priority Roadmap
 
-### P0 — Ship Next
+### P0 — ✅ Complete (v0.4.0)
 
-1. **Checkpoints (shadow git)** — Snapshot before edits, rollback on failure or request.
-2. **AGENTS.md support** — Read on cold start, merge into library context.
-3. **Path-scoped library entries** — Tag entries with file paths, load only when relevant.
-4. **Parallel workers** — Fan out independent subtasks to separate context windows.
+1. ~~**Checkpoints**~~ — File snapshots before edits + conversation rewind
+2. ~~**AGENTS.md support**~~ — Read on cold start, hash-based staleness, merge into library
+3. ~~**Path-scoped library entries**~~ — Scope: header filtering in IndexAgent
+4. ~~**Parallel workers**~~ — parallel_dispatch tool, ThreadPoolExecutor, max 5 tasks
 
-### P1 — Build Soon
+### P1 — In Progress
 
-5. **Confidence-gated actions** — Self-assess before each action. Mechanics → act. Judgment → ask.
-6. **QA loop integration** — Auto-run tests/lint after every edit. Fail → fix → retry loop before moving on.
+5. **QA loop integration** — Auto-run tests/lint after every edit. Fail → fix → retry loop before moving on. Mechanical verification, not prompt-dependent.
+6. **Confidence-gated actions** — Agent self-assesses before each action. Mechanics → act silently. Uncertainty on direction/design → ask_human. No user-configured permission modes.
 7. **Targeted handoff refinement** — Improve handoff doc quality: focused prompt, minimal pointers, clear next-step.
 
 ### P2 — Build Later
