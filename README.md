@@ -1,6 +1,6 @@
 # Kadmon
 
-An autonomous coding agent that manages its own context, asks clarifying questions, and hands off between sessions without human intervention. Scores 100% on Aider Polyglot (Python) benchmark.
+YOLO mode you can trust. An autonomous coding agent that asks the right questions, proves its work, and manages its own context across sessions.
 
 ## Install
 
@@ -19,7 +19,7 @@ pip install kadmon
 kadmon init
 ```
 
-This walks you through provider setup interactively. Then just:
+This walks you through provider setup interactively. Then:
 
 ```bash
 cd your-project
@@ -59,31 +59,83 @@ Config is saved to `.kadmon/config.toml` after `kadmon init` — you only set th
 
 ## What Makes Kadmon Different
 
-Most coding agents are "very talented junior engineers" — they need constant supervision and context management. Kadmon is designed to be piloted like a **team lead manages a senior engineer**:
+Other agents are either fast-but-reckless (YOLO mode, guess and go) or safe-but-slow (approve every file write). Kadmon is neither. It's fully autonomous on mechanics — but asks you when it's genuinely uncertain about direction.
 
-1. **No guessing** — asks clarifying questions when requirements are ambiguous (not for permission — for correctness)
-2. **Rock climbing** — verifies each step before moving to the next, never sprints into the void
-3. **Self-managing context** — detects when its context is degrading, writes a handoff doc, and continues in a fresh session automatically
+### YOLO on execution, deliberate on decisions
 
-### Autonomous Context Management
+Kadmon never asks "can I edit this file?" or "should I run this test?" — it just does it. But when requirements are ambiguous, when a design could go two ways, when it's not sure what you actually want — it asks. This is what makes it trustworthy enough to run unsupervised.
+
+### Self-managing context
+
+Most agents degrade over long sessions. Context fills up with irrelevant tool outputs, the model starts looping, quality drops. You restart, lose everything, re-explain the task.
+
+Kadmon detects this happening and handles it:
+1. Writes a focused handoff document (what's done, what's next, key pointers)
+2. Clears its own context
+3. Continues from the handoff — no human intervention needed
+
+### Persistent memory across sessions
+
+Kadmon maintains a project library (`.kadmon/library/`) that survives across sessions:
+- Architecture notes, conventions, decisions — written by the agent, not by you
+- Mechanical session logging captures everything (flight recorder)
+- LLM-powered curation synthesizes raw logs into clean knowledge between sessions
+- Cross-project session index so kadmon knows what you were working on yesterday
+
+### Checkpoints and rewind
+
+Made a wrong turn? Two escape hatches:
+- `kadmon rewind` — go back to before any recent prompt (conversation reset, files untouched)
+- `kadmon rollback` — undo file changes to any checkpoint
+
+The agent also uses checkpoints autonomously: edit → test → fail → rollback → try differently. No human intervention needed for routine recovery.
+
+## Commands
+
+```bash
+kadmon                    # Interactive chat (default)
+kadmon continue           # Resume previous task from where you left off
+kadmon status             # Show current session and library state
+kadmon status --global    # Show recent sessions across all projects
+kadmon rewind             # Rewind conversation to a previous prompt
+kadmon rollback [id]      # Rollback file changes to a checkpoint
+kadmon checkpoints        # List available file checkpoints
+kadmon init               # Interactive provider setup
+kadmon run --task "..."   # One-shot mode
+```
+
+## Architecture
 
 ```
-.kadmon/
-├── config.toml          # Provider config, preferences
-├── library/             # Persistent knowledge (survives across sessions)
-│   ├── architecture.md  # Project structure notes
-│   ├── conventions.md   # Patterns, gotchas
-│   └── tasks/current.md # Active task state
-├── session.json         # What's in flight right now
-├── handoffs/            # Handoff docs (context continuity)
-└── symbols.db           # Code structure index (tree-sitter)
+kadmon/
+├── agent/       # ReAct loop, planning, handoff, recovery
+├── providers/   # LLM providers (Bedrock, Anthropic, OpenAI, Gemini)
+├── tools/       # file I/O, search, shell, plan, ask_human, library, checkpoints, parallel
+├── memory/      # Library team (index/read/write/prune/curator agents), session log
+├── human/       # Question batching, CLI/webhook channels
+├── workers.py   # Parallel task dispatch (ThreadPoolExecutor)
+├── checkpoints.py  # File-level snapshots for rollback
+├── conversation.py # Conversation state for rewind
+├── eval/        # Benchmark harnesses (Aider Polyglot, SWE-bench)
+└── index/       # Tree-sitter symbol index (SQLite)
 ```
 
-The agent automatically:
-- Loads relevant library context on startup (cold start)
-- Saves learnings after each completed step
-- Detects context degradation (token budget, loops, quality drop)
-- Writes a structured handoff and resets — no human intervention needed
+Key design:
+- **Architect/Editor phase separation** — explore and plan first, then execute step by step
+- **Library Team** — focused LLM subagents for on-demand context retrieval (not blob injection)
+- **Dual-layer persistence** — mechanical capture (JSONL flight recorder) + intelligent curation (LLM synthesis)
+- **Autonomous handoff** — detects context degradation, writes handoff, resets, continues
+- **Parallel workers** — fan out independent subtasks to separate context windows
+- **No frameworks** — provider SDKs directly, minimal core
+- **ask_human as a tool** — always available for genuine uncertainty, never for permission
+
+## Philosophy
+
+Kadmon optimizes for **trust**, not speed.
+
+The bet: developers give more autonomy to an agent that asks "should this be REST or GraphQL?" before building the wrong thing — and then proves it works with passing tests — than to one that silently builds the wrong thing fast.
+
+Trust compounds. An agent that asks good questions and verifies its work earns the right to run unsupervised on bigger tasks. An agent that guesses and sprints earns Ctrl+C.
 
 ## Local Development
 
@@ -93,7 +145,7 @@ cd kadmon
 ./dev
 ```
 
-That's it. `./dev` handles everything: creates a venv, installs dependencies, and launches kadmon from your local source. First run takes ~30s for setup, subsequent runs are instant.
+`./dev` handles everything: creates a venv, installs dependencies, and launches kadmon from your local source.
 
 ```bash
 ./dev              # Launch interactive kadmon (local build)
@@ -103,10 +155,7 @@ That's it. `./dev` handles everything: creates a venv, installs dependencies, an
 ./dev run "task"   # One-shot mode
 ./dev test         # Run tests
 ./dev lint         # Run linter
-./dev setup        # Force reinstall deps
 ```
-
-The global `kadmon` command (from `npm install -g kadmon`) runs the published release. `./dev` always runs your local source. No conflicts.
 
 ## Benchmarking
 
@@ -115,58 +164,16 @@ The global `kadmon` command (from `npm install -g kadmon`) runs the published re
 225 Exercism exercises across Python, JavaScript, Go, Rust, Java, C++.
 
 ```bash
-# Quick smoke test (~$1)
-kadmon bench --languages python --limit 5
-
-# Full Python
-kadmon bench --languages python
-
-# All languages, 10 parallel workers
-kadmon bench -j 10
-
-# Sequential (live timer, good for debugging)
-kadmon bench --limit 5 -j 1
+kadmon bench --languages python --limit 5   # Quick smoke test
+kadmon bench --languages python              # Full Python
+kadmon bench -j 10                           # All languages, parallel
 ```
-
-Results: `eval_results/polyglot/summary.json`
 
 ### SWE-bench
 
 ```bash
 kadmon eval --dataset swe_bench_verified_mini.json --limit 10
 ```
-
-## Architecture
-
-```
-kadmon/
-├── agent/       # ReAct loop, planning, backtracking, handoff, pruner
-├── providers/   # LLM providers (Bedrock, Anthropic, OpenAI)
-├── tools/       # file I/O, search, shell, skeleton, references, plan, ask_human
-├── human/       # Question batching, CLI/webhook channels
-├── eval/        # Benchmark harnesses (Aider Polyglot, SWE-bench)
-├── index/       # Tree-sitter symbol index (SQLite)
-└── memory/      # Librarian, session tracker, read cache
-```
-
-Key design:
-- **Single-threaded ReAct loop** with architect/editor phase separation
-- **No frameworks** — provider SDKs directly, minimal core
-- **Autonomous handoff** — detects context degradation, resets with continuity
-- **File-based memory** — `.kadmon/library/` persists knowledge across sessions
-- **Ambiguity resolution** — `ask_human` tool for genuine uncertainty (not permission)
-
-## Configuration
-
-All defaults in `kadmon/config.py`:
-
-```python
-DEFAULT_MODEL = "us.anthropic.claude-sonnet-4-6"
-DEFAULT_PROVIDER = "bedrock"
-DEFAULT_REGION = "us-east-1"
-```
-
-Per-project config at `.kadmon/config.toml` (created by `kadmon init`).
 
 ## Contributing
 
@@ -178,9 +185,9 @@ See [AGENTS.md](AGENTS.md) for AI contribution guidelines. Key rules:
 ## Publishing
 
 ```bash
-./publish          # patch: 0.1.0 → 0.1.1
-./publish minor    # minor: 0.1.1 → 0.2.0
-./publish major    # major: 0.2.0 → 1.0.0
+./publish          # patch: 0.4.0 → 0.4.1
+./publish minor    # minor: 0.4.1 → 0.5.0
+./publish major    # major: 0.5.0 → 1.0.0
 ```
 
 Bumps version, commits, tags, pushes. CI publishes to PyPI + npm automatically.
