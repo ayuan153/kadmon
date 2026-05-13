@@ -74,12 +74,16 @@ def chat(model, provider, aws_region):
 
     click.echo("Kadmon — type your task, then press Enter. Ctrl+C to exit.\n")
 
+    from kadmon.conversation import ConversationHistory
+    conv_history = ConversationHistory(repo_path)
+
     task = ""
     try:
         while True:
             task = input("> ").strip()
             if not task:
                 continue
+            conv_history.snapshot(task, [], None)
             agent = AgentLoop(
                 provider=llm,
                 tools=tools,
@@ -375,6 +379,73 @@ def status(repo: str, show_global: bool):
         if count:
             click.echo(f"\nHistory:   {count} archived session(s)")
 
+    click.echo("")
+
+
+@main.command()
+@click.option("--with-files", is_flag=True, help="Also rollback file changes")
+def rewind(with_files: bool):
+    """Rewind conversation to a previous prompt."""
+    from kadmon.conversation import ConversationHistory
+
+    repo_path = os.path.abspath(".")
+    history = ConversationHistory(repo_path)
+    turns = history.list_turns()
+    if not turns:
+        click.echo("No conversation history to rewind to.")
+        return
+    click.echo("\nRecent prompts:")
+    for t in turns:
+        click.echo(f"  [{t['turn_id']}] \"{t['prompt']}\"")
+    click.echo("")
+    choice = click.prompt("Rewind to before which prompt?", type=int)
+    turn = history.rewind(choice)
+    if not turn:
+        click.echo(f"Turn {choice} not found.")
+        return
+    if with_files:
+        from kadmon.checkpoints import CheckpointManager
+
+        mgr = CheckpointManager(repo_path)
+        for cp in mgr.list():
+            if cp["timestamp"] > turn.timestamp:
+                mgr.rollback(cp["id"])
+    click.echo(f"\u2713 Conversation restored to before prompt {choice}. {'Files also restored.' if with_files else 'Files unchanged.'}")
+    click.echo("Start kadmon to continue from this point.")
+
+
+@main.command()
+@click.argument("checkpoint_id", required=False)
+def rollback(checkpoint_id):
+    """Rollback file changes to a checkpoint."""
+    from kadmon.checkpoints import CheckpointManager
+
+    repo_path = os.path.abspath(".")
+    mgr = CheckpointManager(repo_path)
+    restored = mgr.rollback(checkpoint_id)
+    if not restored:
+        click.echo("No checkpoint to rollback to.")
+        return
+    click.echo(f"\u2713 Restored {len(restored)} file(s):")
+    for f in restored:
+        click.echo(f"  {f}")
+
+
+@main.command()
+def checkpoints():
+    """List available file checkpoints."""
+    from kadmon.checkpoints import CheckpointManager
+
+    repo_path = os.path.abspath(".")
+    mgr = CheckpointManager(repo_path)
+    cps = mgr.list()
+    if not cps:
+        click.echo("No checkpoints available.")
+        return
+    click.echo("\nCheckpoints:")
+    for cp in cps:
+        files = ", ".join(cp["files"])
+        click.echo(f"  [{cp['id']}] {cp['tool']} \u2014 {files}")
     click.echo("")
 
 

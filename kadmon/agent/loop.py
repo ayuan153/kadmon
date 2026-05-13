@@ -30,7 +30,7 @@ ARCHITECT_TOOLS = {
     "library_read",
     "library_status",
 }
-EDITOR_TOOLS = {"read_file", "edit_file", "write_file", "shell", "submit", "plan", "ask_human", "library_write"}
+EDITOR_TOOLS = {"read_file", "edit_file", "write_file", "shell", "submit", "plan", "ask_human", "library_write", "checkpoint_rollback"}
 
 
 class AgentLoop:

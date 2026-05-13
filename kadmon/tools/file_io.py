@@ -79,9 +79,10 @@ class WriteFileTool(Tool):
         'required': ['path', 'content'],
     }
 
-    def __init__(self, repo_root: str, read_cache: ReadCache | None = None):
+    def __init__(self, repo_root: str, read_cache: ReadCache | None = None, checkpoint_manager=None):
         self._root = Path(repo_root).resolve()
         self._cache = read_cache
+        self._checkpoint = checkpoint_manager
 
     def execute(self, **kwargs) -> ToolResult:
         path = kwargs['path']
@@ -92,6 +93,9 @@ class WriteFileTool(Tool):
             return ToolResult(output=str(e), error=True)
 
         resolved.parent.mkdir(parents=True, exist_ok=True)
+        if self._checkpoint and resolved.is_file():
+            rel = str(resolved.relative_to(self._root))
+            self._checkpoint.create([rel], self.name)
         resolved.write_text(content)
         if self._cache:
             self._cache.invalidate(path)
@@ -111,9 +115,10 @@ class EditFileTool(Tool):
         'required': ['path', 'old_str', 'new_str'],
     }
 
-    def __init__(self, repo_root: str, read_cache: ReadCache | None = None):
+    def __init__(self, repo_root: str, read_cache: ReadCache | None = None, checkpoint_manager=None):
         self._root = Path(repo_root).resolve()
         self._cache = read_cache
+        self._checkpoint = checkpoint_manager
 
     def execute(self, **kwargs) -> ToolResult:
         path = kwargs['path']
@@ -143,6 +148,9 @@ class EditFileTool(Tool):
             )
 
         new_content = content.replace(old_str, new_str, 1)
+        if self._checkpoint:
+            rel = str(resolved.relative_to(self._root))
+            self._checkpoint.create([rel], self.name)
         resolved.write_text(new_content)
         if self._cache:
             self._cache.invalidate(path)
