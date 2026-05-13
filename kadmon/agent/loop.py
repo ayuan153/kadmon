@@ -86,6 +86,10 @@ class AgentLoop:
             from kadmon.memory.agents.curator_agent import CuratorAgent
             CuratorAgent(self.provider, self._repo_root).curate()
 
+        # Ingest AGENTS.md if present and changed
+        if self.librarian:
+            self._ingest_agents_md()
+
         # Start session tracking
         if self.session_tracker:
             self.session_tracker.start(task)
@@ -291,3 +295,27 @@ class AgentLoop:
     def _filtered_tools(self, allowed: set[str]) -> list[dict]:
         """Return tool definitions filtered to the allowed set."""
         return [t for t in self.tools.definitions() if t["name"] in allowed]
+
+    def _ingest_agents_md(self) -> None:
+        """Ingest AGENTS.md into library if present and changed."""
+        import hashlib
+        from pathlib import Path
+
+        agents_md = Path(self._repo_root) / "AGENTS.md"
+        if not agents_md.exists():
+            return
+
+        content = agents_md.read_text()
+        new_hash = hashlib.sha256(content.encode()).hexdigest()
+
+        hash_path = Path(self._repo_root) / ".kadmon" / "agents_md_hash"
+        hash_path.parent.mkdir(parents=True, exist_ok=True)
+        if hash_path.exists() and hash_path.read_text().strip() == new_hash:
+            return
+
+        from kadmon.memory.agents.write_agent import WriteAgent
+
+        library_path = Path(self._repo_root) / ".kadmon" / "library"
+        writer = WriteAgent(self.provider, library_path)
+        writer.update("conventions", content)
+        hash_path.write_text(new_hash)
