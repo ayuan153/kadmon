@@ -28,13 +28,14 @@ class LibraryReadTool(Tool):
         self._read_agent = ReadAgent(provider, self._library_path)
         self.tracker = TokenTracker()
         self._cache = LibraryCache()
+        self.active_files: list[str] = []
 
     def execute(self, query: str) -> ToolResult:
         cached = self._cache.get(query)
         if cached is not None:
             return ToolResult(output=cached)
 
-        result = self._index_agent.find_relevant(query, tracker=self.tracker)
+        result = self._index_agent.find_relevant(query, tracker=self.tracker, active_files=self.active_files or None)
         if result.orthogonal:
             self._prune_agent.prune(query, tracker=self.tracker)
         if not result.files:

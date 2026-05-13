@@ -15,6 +15,9 @@ Rules:
 - Keep entries concise and structured (markdown headers, bullet points).
 - Add a "Last Updated: YYYY-MM-DD" line at the end.
 - If no existing content, create a well-structured new file.
+- If the content is clearly about specific files/directories, add a "Scope: pattern1, pattern2" line after the title.
+  Example: Scope: src/auth/**, tests/test_auth*
+- Only add scope if the knowledge is genuinely file-specific. General conventions should NOT have scope.
 
 Respond with ONLY the complete updated file content (no explanation)."""
 

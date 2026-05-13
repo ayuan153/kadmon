@@ -72,6 +72,7 @@ Explore the codebase, understand the issue, and create a step-by-step plan for f
 - Use shell to run tests and see current failures.
 - Use plan(action='create') to create your execution plan when ready.
 - Use library_read to load project context (conventions, architecture, past decisions).
+- Use parallel_dispatch to run independent subtasks concurrently (e.g., reading multiple modules).
 
 ## Rules
 - Do NOT edit files. You are planning only.

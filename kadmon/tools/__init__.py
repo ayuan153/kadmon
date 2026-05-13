@@ -12,6 +12,7 @@ from kadmon.tools.search import GrepSearchTool
 from kadmon.tools.shell import ShellTool
 from kadmon.tools.skeleton import FileSkeletonTool
 from kadmon.tools.submit import SubmitTool
+from kadmon.tools.parallel import ParallelDispatchTool
 
 from kadmon.providers.base import LLMProvider
 
@@ -38,6 +39,7 @@ def create_default_registry(repo_root: str, db: SymbolDB | None = None, provider
         registry.register(read_tool)
         registry.register(write_tool)
         registry.register(LibraryStatusTool(repo_root, read_tracker=read_tool.tracker, write_tracker=write_tool.tracker))
+        registry.register(ParallelDispatchTool(provider, repo_root))
     else:
         registry.register(LibraryStatusTool(repo_root))
     return registry
