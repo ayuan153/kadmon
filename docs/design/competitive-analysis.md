@@ -5,9 +5,90 @@ Research into OMKC (Oh-my-kiro-cli), Cline, OpenAI Codex, and Claude Code — wh
 ## Kadmon's Differentiators (Non-Negotiable)
 
 1. **Autonomous context management** — detects degradation, writes its own handoff, resets, continues. No other agent does this natively.
-2. **Ask for correctness, not permission** — biases toward clarifying questions on ambiguity. Enables trust → enables autonomy.
+2. **YOLO you can trust** — full autonomy on tool use and execution, but asks liberally for direction, grounding, and implementation decisions. The trust comes from speaking up, not from skipping checks.
 3. **Self-managing library** — agent writes its own persistent memory (not user-maintained like CLAUDE.md or Memory Bank).
 4. **Mechanical + intelligent persistence** — deterministic capture (flight recorder) + LLM curation (librarian). Belt and suspenders.
+5. **Heavy QA emphasis** — fast, deterministic, high-coverage feedback loops. Autonomy without verification is just gambling.
+
+## Features to Implement (Table Stakes)
+
+| Feature | From | Kadmon Adaptation |
+|---------|------|-------------------|
+| Checkpoints (shadow git) | Cline | Snapshot working tree before edits. Enable rollback without touching user's git history. |
+| AGENTS.md support | Codex/Claude Code | Read on cold start, merge into library. Cross-tool standard. |
+| Parallel subagents | Codex/OMKC/Cline | Fan out independent subtasks to separate context windows. Merge results. |
+| Path-scoped rules | Claude Code | Library entries tagged with file paths; loaded only when those paths are relevant. |
+
+## Features to Skip
+
+| Feature | From | Why Skip |
+|---------|------|----------|
+| User-maintained memory files | Cline (Memory Bank) | Kadmon's library is self-managing. Don't regress to requiring user curation. |
+| Cloud sandboxes | Codex | Kadmon is local-first, no phone-home. |
+| Compaction/summarization | Claude Code/Cline | Ineffective. Kadmon's approach: targeted handoff prompt + pointers for next task, with minimal background context the agent can retrieve as needed. Fresh context > degraded summary. |
+| Rigid delegation templates | OMKC | Over-structured for a single-agent system. |
+| "Minimize clarifying questions" | Claude Code (auto mode) | Directly opposes Kadmon's core value. |
+| Visible plan as static checklist | Cline (Focus Chain) | Plans need to be flexible and evolve. A rigid visible checklist is an overoptimization that constrains adaptation. |
+
+## The YOLO Reframe
+
+Other agents treat YOLO as "skip all safety checks." Kadmon reframes it:
+
+**Kadmon's YOLO = full autonomy on execution + liberal ask_human for direction.**
+
+| Dimension | Other Agents' YOLO | Kadmon's YOLO |
+|-----------|-------------------|---------------|
+| Tool use | Auto-approve everything | Auto-approve everything |
+| File edits | No confirmation | No confirmation |
+| Shell commands | No confirmation | No confirmation |
+| Ambiguous requirements | Guess and go | **ask_human** |
+| Design decisions | Pick one silently | **ask_human** |
+| Uncertain about approach | Try something | **ask_human** |
+| After implementation | Move on | **Run tests, verify, QA loop** |
+
+The insight: users don't want to approve `mkdir` and `git add`. They want to approve *decisions*. Kadmon auto-executes mechanics but escalates judgment calls.
+
+## Features to Innovate On
+
+| Innovation | Kadmon's Approach |
+|-----------|-------------------|
+| **Targeted handoff (not compaction)** | On context degradation: write a focused prompt + pointers to relevant docs/code. Clear context to 0 (or near-0). Fresh start with surgical context > bloated summary. |
+| **Confidence-gated asking** | No user-configured modes. Agent self-assesses per action: high confidence on mechanics → act. Uncertainty on direction/design → ask. |
+| **Cross-session task continuity** | Central index + structured handoffs + library = seamless multi-session work without user managing state. |
+| **QA-first autonomy** | Every change verified by fast feedback loops (tests, type checks, lints). Autonomy is earned by proving correctness, not by skipping verification. |
+| **Proactive handoff** | Detect degradation + write handoff + reset + continue. No other agent does this. |
+
+## Priority Roadmap
+
+### P0 — Ship Next
+
+1. **Checkpoints (shadow git)** — Snapshot before edits, rollback on failure or request.
+2. **AGENTS.md support** — Read on cold start, merge into library context.
+3. **Path-scoped library entries** — Tag entries with file paths, load only when relevant.
+4. **Parallel workers** — Fan out independent subtasks to separate context windows.
+
+### P1 — Build Soon
+
+5. **Confidence-gated actions** — Self-assess before each action. Mechanics → act. Judgment → ask.
+6. **QA loop integration** — Auto-run tests/lint after every edit. Fail → fix → retry loop before moving on.
+7. **Targeted handoff refinement** — Improve handoff doc quality: focused prompt, minimal pointers, clear next-step.
+
+### P2 — Build Later
+
+8. **Model routing** — Cheap model for indexing/planning, strong model for editing/synthesis.
+9. **Hooks API** — User-defined pre/post hooks on tool calls for custom automation.
+10. **Auto-review on risky actions** — Second LLM pass on destructive commands before executing.
+
+## Philosophical Stance
+
+Kadmon is the agent you trust to run unsupervised — not because it never asks questions, but because it asks the RIGHT questions and proves its work.
+
+- **Claude Code** optimizes for speed (auto mode, minimize questions)
+- **Codex** optimizes for safety (sandboxes, platform enforcement)
+- **Cline** optimizes for control (checkpoints, granular approvals)
+- **Kadmon** optimizes for TRUST (ask when uncertain, prove when done, remember across sessions)
+
+The bet: YOLO-with-judgment beats YOLO-with-silence. Developers will give unlimited autonomy to an agent that asks "should this be a REST endpoint or a GraphQL resolver?" before building the wrong thing — and then proves it works with passing tests.
 
 ## Features to Steal
 
