@@ -1,39 +1,33 @@
-# Intelligent Verification
+# Intelligent Verification: Scout → Verify → Reflect
 
 ## Overview
 
-Kadmon verifies like a senior dev, not like a CI pipeline. It understands the project's verification landscape, chooses the right level of verification for the moment, and proactively fills testing gaps — or asks when new infrastructure is needed.
+Kadmon verifies like a senior dev. It understands the project's verification landscape (Scout), proves changes work at the appropriate level (Verify), and improves test quality after the fact (Reflect). The result: a human reviewing Kadmon's work never thinks "did you even test this?"
 
-The promise: a human reviewing Kadmon's work should never think "did you even test this?"
+## The Three Phases
 
-## The Problem
+```
+Scout (low frequency, cached in library)
+  → "What does verification look like for this project?"
 
-Agents today either:
-- Run nothing (hope for the best, ship broken code)
-- Run everything after every edit (slow, wasteful, still misses real issues)
-- Write fake unit tests that test the implementation, not the behavior
+Build (the actual implementation work)
 
-None of these earn trust. Trust comes from intelligent verification — the same judgment a senior engineer applies.
+Verify (post-build, proportional to change)
+  → "Prove this works — targeted tests, integration probes, new tests if needed"
 
-## What a Senior Dev Does
+Reflect (post-verify, non-trivial changes only)
+  → "Can these tests be better? DRY, parameterized, high signal?"
+```
 
-| Moment | Action | Speed |
-|--------|--------|-------|
-| During development | Run the specific test for the code being changed | ~200ms |
-| After a logical chunk | Run the module's test suite | ~2-15s |
-| Before committing | Run full local suite + lint | ~30-60s |
-| Before deploying | Integration/E2E tests | ~1-15min |
+---
 
-They also:
-- Write a test FIRST when adding new behavior (locks in intent, not implementation)
-- Notice when test coverage is missing and fill the gap
-- Flag when verification requires infrastructure that doesn't exist
+## Phase 1: Scout
 
-## Kadmon's Verification Model
+**When:** First session in a project, or when verification landscape changes.
+**Frequency:** Low. Results cached in library as a VerificationProfile entry.
+**Cost:** One exploration pass + library_write.
 
-### Phase 1: Learn the Verification Landscape
-
-On first session, Kadmon discovers and stores in library:
+### What Scout discovers:
 
 ```markdown
 # Verification Profile
@@ -41,9 +35,9 @@ Scope: *
 
 ## Test Infrastructure
 - Framework: pytest
-- Unit tests: tests/unit/ (~2s full, ~200ms targeted)
-- Integration tests: tests/integration/ (~15s, requires local DB)
-- E2E: scripts/e2e.sh (~5min, requires deployed staging)
+- Unit: tests/unit/ (~2s full, ~200ms targeted)
+- Integration: tests/integration/ (~15s, requires local DB via docker-compose)
+- E2E: scripts/e2e.sh (~5min, requires staging deploy)
 - Lint: ruff check src/
 - Type check: mypy src/
 
@@ -52,71 +46,139 @@ Scope: *
 - Single file: pytest tests/unit/test_auth.py
 - Module: pytest tests/unit/auth/
 
+## Shared Infrastructure
+- conftest.py: db fixture, authenticated_client, factories
+- tests/factories.py: UserFactory, PaymentFactory
+
 ## Gaps
 - No integration tests for payment module
-- E2E only covers happy path
+- E2E only covers happy path login flow
+- No local way to test webhook handling
+
+## Timings
+- Unit (targeted): ~200ms
+- Unit (full): ~2s
+- Integration: ~15s
+- E2E: ~5min
 ```
 
-This is a library entry (path-scoped to `*` = global). Updated by the Curator when the agent discovers new test infrastructure.
+### When Scout re-runs:
+- Agent discovers new test framework/tooling during work
+- Agent notices a gap not previously recorded
+- User changes test infrastructure (new conftest, new docker-compose, etc.)
+- Curator updates profile from session log observations
 
-### Phase 2: Choose Verification by Moment
+---
 
-The agent decides what to verify based on context:
+## Phase 2: Verify
 
-| Situation | Verification choice |
-|-----------|-------------------|
-| Fixed a typo in one function | Run that function's test |
-| Implemented a new feature (plan step done) | Run module tests |
-| All plan steps complete, about to submit | Full suite + lint |
-| Changed behavior that has E2E coverage | Run E2E at the end |
-| No tests exist for this code | Write one first (see Phase 3) |
+**When:** After building. Proportional to the change.
+**Goal:** Prove the change works. Fast feedback during dev, broader checks before submit.
 
-This is NOT a mechanical hook. It's prompt-guided judgment with a mechanical backstop.
+### Verification levels (agent chooses by moment):
 
-### Phase 3: Proactive Gap-Filling
+| Moment | Action | Timing |
+|--------|--------|--------|
+| After editing implementation | Run targeted test for that code | ~200ms |
+| After completing a plan step | Run module test suite | ~2-15s |
+| New behavior with no existing test | Write a behavior test, then run it | ~30s |
+| Before submit | Full suite + lint | ~30-60s |
+| Non-trivial change to integration points | Run integration tests | ~15s-5min |
 
-Kadmon holds an opinion on what "well-verified" means:
+### Probing (the "manual test" equivalent):
 
-1. **At least one test that would fail if the change broke** (behavior test, not implementation test)
-2. **Regression coverage** (existing tests still pass)
-3. **Appropriate scope** (unit for logic, integration for interactions, E2E for flows)
+When appropriate, the agent can:
+- Run the application and hit it (curl, script, browser automation)
+- Inspect output/logs to verify behavior
+- **Then mechanize it** — turn the probe into an automated test
 
-Three postures based on what's missing:
+This is the natural flow: build → fastest check if it works → lock it in as a test.
+
+The agent should prefer building reusable tooling (a test script, a fixture) over one-off manual probes when the pattern will recur.
+
+### Three postures for missing tests:
 
 **Execute mechanically** (just do it):
-- Tests exist → run them
 - New function needs a unit test → write it
 - Existing test needs updating for new behavior → update it
-- Test file exists but doesn't cover the changed code path → add a case
+- Can write a behavior test with existing fixtures → write it
 
-**Stop and ask** (ask_human — new paradigm/infra needed):
-- "This service has no integration tests. I think we need a test harness with a local DB. Should I build that, or is there an existing pattern?"
-- "There's no way to verify this locally — it requires a deployed environment. Do you have staging, or should I build a local mock?"
-- "The existing tests all mock the database. They won't catch this bug class. OK to add a real integration test with a test DB dependency?"
-- "I'd like to add E2E tests but there's no test runner for the frontend. Should I set up Playwright/Cypress?"
+**Stop and ask** (ask_human — new infra/paradigm needed):
+- "No integration tests exist for this module. I'd need to set up a test DB. Should I?"
+- "Can't verify this locally — needs a deployed environment. Do you have staging?"
+- "Existing tests all mock the DB. They won't catch this bug class. OK to add real integration tests?"
 
 **Flag and proceed** (inform, don't block):
-- "Verified with unit tests. No E2E coverage for this flow — flagging for manual verification."
-- "Tests pass but this module has low coverage. Consider adding integration tests."
+- "Verified with unit tests. No E2E coverage for this flow — flagging for manual check."
 
-### Phase 4: Mechanical Backstop
+### Mechanical backstop:
 
-Regardless of the agent's judgment, the system enforces:
+- Submit tool requires at least one passing test run this session
+- If an edit breaks a targeted test: must fix or rollback before proceeding (max 3 retries, then rollback + ask_human)
 
-- **Before submit**: at least one test run must have passed this session (any level)
-- **After failed edit**: if the agent edits a file and the targeted test fails, it MUST fix or rollback before proceeding (uses existing checkpoint system)
-- **Max retries**: 3 attempts to fix a failing test, then rollback + ask_human with full context of what was tried
+---
+
+## Phase 3: Reflect
+
+**When:** After task is complete and verified. Skipped for trivial changes.
+**Goal:** Improve test quality — DRY, parameterized, high signal, high recall.
+**Key rule:** Refactoring existing tests the agent didn't write → ask_human first, separate commit.
+
+### What Reflect evaluates:
+
+1. **Duplication** — Are there tests covering the same behavioral path? → Parameterize
+2. **Parameterization** — Could N similar tests be one parameterized test? → Refactor
+3. **Signal** — Would these tests actually catch a regression? → Strengthen or remove
+4. **Maintainability** — Are fixtures/factories reusable? → Extract shared infrastructure
+5. **Coverage gaps** — Did we miss an important behavioral axis? → Flag or add
+
+### Reflect workflow:
+
+```
+Agent completes task → runs Reflect analysis → identifies improvements →
+  If improvements touch only tests written this session:
+    → Apply them (same commit or amend)
+  If improvements touch existing tests:
+    → ask_human: "I noticed these existing tests could be improved: [description]. Want me to refactor? I'll put it in a separate commit."
+    → If yes: refactor in separate commit on top
+    → If no: note in library for future reference
+```
+
+### What "good tests" means (Kadmon's opinion):
+
+- **Parameterized over duplicated** — one test with N cases, not N copy-pasted tests
+- **Behavior over implementation** — test what the code does, not how it does it
+- **Fixtures over setup repetition** — invest in test infrastructure early
+- **Black-box surface area coverage** — identify input axes, cover the combinations
+- **Strategic mocking** — mock slow/nondeterministic externals, test real logic
+
+### Surface area mapping (pre-test-writing):
+
+Before writing tests for a module, the agent maps:
+```
+This endpoint has 3 input axes:
+  - Auth state: valid, expired, missing (3 values)
+  - Request body: valid, malformed, empty (3 values)  
+  - User role: admin, regular (2 values)
+= 18 combinations. Recommend: 2 parameterized tests (happy + error paths)
+  covering 18 cases, plus 1 edge-case test for the admin-only deletion flow.
+```
+
+---
 
 ## Implementation
 
-### VerificationProfile (stored in library)
+### Components:
 
-Discovered on first session, updated by Curator. Contains:
-- Available test commands + approximate timings
-- How to run targeted tests (per-file, per-function patterns)
-- Known gaps (modules without tests, missing infrastructure)
+| Component | What it does |
+|-----------|-------------|
+| `VerificationProfile` | Library entry describing test landscape (Scout output) |
+| `QARunner` (`kadmon/qa.py`) | Runs test commands, returns results with timing |
+| `verify` tool | Agent calls explicitly with scope (targeted/module/full) |
+| Submit gate | Blocks submit if no verification passed this session |
+| Reflect prompt | Post-task analysis of test quality (prompt-guided, not mechanical) |
 
-### QARunner (`kadmon/qa.py`)
+### QARunner interface:
 
 ```python
 @dataclass
@@ -128,55 +190,62 @@ class QAResult:
 
 class QARunner:
     def __init__(self, repo_root: str): ...
-    def discover(self) -> VerificationProfile: ...
-    def run_targeted(self, file: str) -> QAResult: ...
-    def run_module(self, path: str) -> QAResult: ...
+    def discover(self) -> dict:  # Returns verification profile data
+    def run_targeted(self, test_path: str) -> QAResult: ...
+    def run_module(self, module_path: str) -> QAResult: ...
     def run_full(self) -> QAResult: ...
     def run_lint(self) -> QAResult: ...
+    def run_command(self, command: str, timeout: int = 60) -> QAResult: ...
 ```
 
-### Agent Integration
+### Verify tool:
 
-NOT a mechanical hook after every edit. Instead:
+```python
+class VerifyTool(Tool):
+    name = "verify"
+    description = "Run verification. Use after edits to prove changes work."
+    parameters = {
+        "scope": "targeted|module|full|lint|custom",
+        "target": "path to test file or module (for targeted/module)",
+        "command": "custom command to run (for custom scope)",
+    }
+```
 
-1. **Prompt guidance** — EDITOR_PROMPT tells the agent about the verification landscape and when to verify
-2. **Verification tool** — `verify` tool the agent calls explicitly (wraps QARunner)
-3. **Submit gate** — submit tool checks that at least one verification passed this session
-4. **Retry injection** — when verification fails, output is injected into context automatically
+### Prompt additions:
 
-### Prompt additions (EDITOR_PROMPT)
-
+**EDITOR_PROMPT** — verification guidance:
 ```
 ## Verification
-You have a `verify` tool. Use it intelligently:
-- After editing implementation: verify(target="path/to/test_file.py") for fast feedback
-- After completing a plan step: verify(scope="module") for regression check  
-- Before submitting: verify(scope="full") for confidence
+After edits, use `verify` to prove your changes work:
+- verify(scope="targeted", target="tests/test_auth.py::test_refresh") — fast, after each edit
+- verify(scope="module", target="tests/auth/") — after completing a plan step
+- verify(scope="full") — before submitting
+- verify(scope="custom", command="curl localhost:8000/health") — for integration probes
 
-If no tests exist for the code you're changing:
-- If you can write a behavior test mechanically: write it, then implement
-- If testing requires new infrastructure: ask_human before proceeding
+If no tests exist for the code you changed:
+- Write a behavior test (parameterized if multiple cases) → then implement
+- If testing requires new infrastructure → ask_human
 
-Never submit without at least one passing verification run.
+Before submitting: at least one verification must have passed.
 ```
 
-## What This Is NOT
+**Post-task Reflect** (injected after all plan steps complete):
+```
+Before submitting, review the tests you wrote or modified:
+- Could any be parameterized instead of duplicated?
+- Do they test behavior (what) or implementation (how)?
+- Would they catch a real regression?
+- Are there shared patterns that should be fixtures?
+If existing tests need refactoring, ask_human before touching them.
+```
 
-- Not TDD dogma (agent chooses when test-first is appropriate)
-- Not "run pytest after every line" (agent chooses verification level)
-- Not a CI replacement (this is local dev-loop verification)
-- Not mandatory for every project (graceful fallback if no tests exist)
-
-## Open Questions
-
-1. Should the `verify` tool have a timeout? (Probably yes — 60s default, configurable)
-2. Should verification profile discovery be its own agent (like IndexAgent) or simpler heuristic-based?
-3. How does the agent learn timings? (Run once, measure, store in profile)
+---
 
 ## Success Criteria
 
-1. Agent never submits code without having verified it at some level
-2. Agent writes tests for new behavior proactively (not just running existing tests)
-3. Agent asks_human when verification infrastructure is missing (not silently shipping untested code)
-4. Agent chooses appropriate verification level (not running E2E after a one-line fix)
-5. Human reviewing Kadmon's output feels confident it was tested properly
+1. Agent never submits without verification
+2. Agent writes parameterized behavior tests, not bloated implementation tests
+3. Agent proactively fills test gaps (mechanically when possible, asks when infra needed)
+4. Agent identifies test quality improvements and proposes them (separate commit)
+5. Test suites written by Kadmon are maintainable — a human reading them thinks "this is well-structured"
+6. Agent respects test timings — doesn't run 5-minute E2E after a one-line fix
