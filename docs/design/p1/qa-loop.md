@@ -1,90 +1,182 @@
-# QA Loop: Mechanical Verification After Every Edit
+# Intelligent Verification
 
 ## Overview
 
-Currently, test-after-edit is prompt-dependent — the LLM might forget, skip, or not know the command. The QA Loop makes verification **mechanical**: the system automatically runs tests after every file write, injecting failures back into context for the agent to fix. This is how "YOLO you can trust" works — autonomy earned through proven correctness.
+Kadmon verifies like a senior dev, not like a CI pipeline. It understands the project's verification landscape, chooses the right level of verification for the moment, and proactively fills testing gaps — or asks when new infrastructure is needed.
 
-## What "QA" Means Here
+The promise: a human reviewing Kadmon's work should never think "did you even test this?"
 
-- **Fast feedback only**: lint, type check, unit tests — things that complete in seconds
-- **NOT**: manual testing, integration tests, deployment, E2E suites
-- Goal: tight `edit → verify` loop, not comprehensive QA
+## The Problem
 
-## How It Works
+Agents today either:
+- Run nothing (hope for the best, ship broken code)
+- Run everything after every edit (slow, wasteful, still misses real issues)
+- Write fake unit tests that test the implementation, not the behavior
 
-1. Agent calls `edit_file` or `write_file` → tool succeeds
-2. System automatically runs the configured verification command
-3. **Pass** → continue normally
-4. **Fail** → inject failure output into context, agent gets a turn to fix
-5. **Fail 3 times** → `checkpoint_rollback` → `ask_human` with summary of attempts
+None of these earn trust. Trust comes from intelligent verification — the same judgment a senior engineer applies.
 
-## Verification Command Discovery
+## What a Senior Dev Does
 
-1. `.kadmon/config.toml` → `[qa] command = "pytest -x"` (explicit)
-2. Auto-detect: `package.json` scripts.test → `npm test` | `pyproject.toml` [tool.pytest] → `pytest` | `Makefile` test target → `make test` | `Cargo.toml` → `cargo test`
-3. Agent sets it via tool call during exploration (stored in session state)
-4. **Fallback**: no command found → skip verification, don't block
+| Moment | Action | Speed |
+|--------|--------|-------|
+| During development | Run the specific test for the code being changed | ~200ms |
+| After a logical chunk | Run the module's test suite | ~2-15s |
+| Before committing | Run full local suite + lint | ~30-60s |
+| Before deploying | Integration/E2E tests | ~1-15min |
+
+They also:
+- Write a test FIRST when adding new behavior (locks in intent, not implementation)
+- Notice when test coverage is missing and fill the gap
+- Flag when verification requires infrastructure that doesn't exist
+
+## Kadmon's Verification Model
+
+### Phase 1: Learn the Verification Landscape
+
+On first session, Kadmon discovers and stores in library:
+
+```markdown
+# Verification Profile
+Scope: *
+
+## Test Infrastructure
+- Framework: pytest
+- Unit tests: tests/unit/ (~2s full, ~200ms targeted)
+- Integration tests: tests/integration/ (~15s, requires local DB)
+- E2E: scripts/e2e.sh (~5min, requires deployed staging)
+- Lint: ruff check src/
+- Type check: mypy src/
+
+## How to Run Targeted
+- Single test: pytest tests/unit/test_auth.py::test_refresh -x
+- Single file: pytest tests/unit/test_auth.py
+- Module: pytest tests/unit/auth/
+
+## Gaps
+- No integration tests for payment module
+- E2E only covers happy path
+```
+
+This is a library entry (path-scoped to `*` = global). Updated by the Curator when the agent discovers new test infrastructure.
+
+### Phase 2: Choose Verification by Moment
+
+The agent decides what to verify based on context:
+
+| Situation | Verification choice |
+|-----------|-------------------|
+| Fixed a typo in one function | Run that function's test |
+| Implemented a new feature (plan step done) | Run module tests |
+| All plan steps complete, about to submit | Full suite + lint |
+| Changed behavior that has E2E coverage | Run E2E at the end |
+| No tests exist for this code | Write one first (see Phase 3) |
+
+This is NOT a mechanical hook. It's prompt-guided judgment with a mechanical backstop.
+
+### Phase 3: Proactive Gap-Filling
+
+Kadmon holds an opinion on what "well-verified" means:
+
+1. **At least one test that would fail if the change broke** (behavior test, not implementation test)
+2. **Regression coverage** (existing tests still pass)
+3. **Appropriate scope** (unit for logic, integration for interactions, E2E for flows)
+
+Three postures based on what's missing:
+
+**Execute mechanically** (just do it):
+- Tests exist → run them
+- New function needs a unit test → write it
+- Existing test needs updating for new behavior → update it
+- Test file exists but doesn't cover the changed code path → add a case
+
+**Stop and ask** (ask_human — new paradigm/infra needed):
+- "This service has no integration tests. I think we need a test harness with a local DB. Should I build that, or is there an existing pattern?"
+- "There's no way to verify this locally — it requires a deployed environment. Do you have staging, or should I build a local mock?"
+- "The existing tests all mock the database. They won't catch this bug class. OK to add a real integration test with a test DB dependency?"
+- "I'd like to add E2E tests but there's no test runner for the frontend. Should I set up Playwright/Cypress?"
+
+**Flag and proceed** (inform, don't block):
+- "Verified with unit tests. No E2E coverage for this flow — flagging for manual verification."
+- "Tests pass but this module has low coverage. Consider adding integration tests."
+
+### Phase 4: Mechanical Backstop
+
+Regardless of the agent's judgment, the system enforces:
+
+- **Before submit**: at least one test run must have passed this session (any level)
+- **After failed edit**: if the agent edits a file and the targeted test fails, it MUST fix or rollback before proceeding (uses existing checkpoint system)
+- **Max retries**: 3 attempts to fix a failing test, then rollback + ask_human with full context of what was tried
 
 ## Implementation
+
+### VerificationProfile (stored in library)
+
+Discovered on first session, updated by Curator. Contains:
+- Available test commands + approximate timings
+- How to run targeted tests (per-file, per-function patterns)
+- Known gaps (modules without tests, missing infrastructure)
+
+### QARunner (`kadmon/qa.py`)
 
 ```python
 @dataclass
 class QAResult:
     passed: bool
-    output: str  # stdout+stderr, truncated to 2000 chars
+    output: str
     duration: float
+    command: str
 
 class QARunner:
-    def discover_command(self, repo_root: Path) -> str | None: ...
-    def run(self, repo_root: Path) -> QAResult: ...
+    def __init__(self, repo_root: str): ...
+    def discover(self) -> VerificationProfile: ...
+    def run_targeted(self, file: str) -> QAResult: ...
+    def run_module(self, path: str) -> QAResult: ...
+    def run_full(self) -> QAResult: ...
+    def run_lint(self) -> QAResult: ...
 ```
 
-**Hook point**: `AgentLoop._process_response()`, after successful `edit_file`/`write_file` — before returning control to the LLM.
+### Agent Integration
 
-**Config** (`.kadmon/config.toml`):
-```toml
-[qa]
-enabled = true        # default true
-command = "pytest -x" # optional, overrides auto-detect
-timeout = 30          # seconds
-max_retries = 3       # before rollback + escalation
-```
+NOT a mechanical hook after every edit. Instead:
 
-## Retry Loop
+1. **Prompt guidance** — EDITOR_PROMPT tells the agent about the verification landscape and when to verify
+2. **Verification tool** — `verify` tool the agent calls explicitly (wraps QARunner)
+3. **Submit gate** — submit tool checks that at least one verification passed this session
+4. **Retry injection** — when verification fails, output is injected into context automatically
+
+### Prompt additions (EDITOR_PROMPT)
 
 ```
-edit_file("src/foo.py")
-  → checkpoint exists (pre-edit, already implemented)
-  → QA runs → FAIL (retry 1/3)
-    → inject: "[QA FAILED] output: ..."
-    → agent turn → fixes foo.py → QA runs → PASS → continue
-    OR → FAIL (retry 2/3) → agent fixes → QA → PASS → continue
-    OR → FAIL (retry 3/3) → checkpoint_rollback → ask_human
+## Verification
+You have a `verify` tool. Use it intelligently:
+- After editing implementation: verify(target="path/to/test_file.py") for fast feedback
+- After completing a plan step: verify(scope="module") for regression check  
+- Before submitting: verify(scope="full") for confidence
+
+If no tests exist for the code you're changing:
+- If you can write a behavior test mechanically: write it, then implement
+- If testing requires new infrastructure: ask_human before proceeding
+
+Never submit without at least one passing verification run.
 ```
 
-Each retry is a normal agent turn — it sees test output and decides how to fix.
+## What This Is NOT
 
-## What NOT To Do
-
-- Don't run QA after `read_file`, `grep`, `list_dir` — only after file writes
-- Don't run QA if edited file matches `**/test_*` or `**/*_test.*` (avoid infinite loops)
-- Don't run QA in architect mode — only editor mode
-- Don't block on slow suites — kill after timeout, treat as skip
-- Don't make QA mandatory — graceful no-op if no command discovered
-
-## Checkpoint Interaction
-
-Checkpoint is created BEFORE the edit (existing behavior). QA failure exhaustion → rollback to that checkpoint → file restored to pre-edit state. Agent never leaves files in a broken-tests state.
+- Not TDD dogma (agent chooses when test-first is appropriate)
+- Not "run pytest after every line" (agent chooses verification level)
+- Not a CI replacement (this is local dev-loop verification)
+- Not mandatory for every project (graceful fallback if no tests exist)
 
 ## Open Questions
 
-1. Run after EVERY edit or only after plan-step completion? (Every edit = safer, slower)
-2. Run relevant test file only or full suite? (Relevant = faster, might miss regressions)
-3. Cache QA command per session or re-discover each time?
+1. Should the `verify` tool have a timeout? (Probably yes — 60s default, configurable)
+2. Should verification profile discovery be its own agent (like IndexAgent) or simpler heuristic-based?
+3. How does the agent learn timings? (Run once, measure, store in profile)
 
 ## Success Criteria
 
-- Zero edits land with failing tests in final output (unless QA disabled/unavailable)
-- Agent self-recovers from test failures without human intervention >80% of the time
-- QA adds <2s overhead per edit for fast test suites
-- No infinite loops from test-file edits triggering QA
+1. Agent never submits code without having verified it at some level
+2. Agent writes tests for new behavior proactively (not just running existing tests)
+3. Agent asks_human when verification infrastructure is missing (not silently shipping untested code)
+4. Agent chooses appropriate verification level (not running E2E after a one-line fix)
+5. Human reviewing Kadmon's output feels confident it was tested properly
