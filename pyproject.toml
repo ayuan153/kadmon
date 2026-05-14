@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "kadmon"
-version = "0.4.0"
+version = "0.5.0"
 description = "An autonomous coding agent that manages its own context across sessions"
 readme = "README.md"
 license = "MIT"
