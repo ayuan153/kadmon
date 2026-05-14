@@ -12,6 +12,7 @@ from kadmon.tools.search import GrepSearchTool
 from kadmon.tools.shell import ShellTool
 from kadmon.tools.skeleton import FileSkeletonTool
 from kadmon.tools.submit import SubmitTool
+from kadmon.tools.verify import VerifyTool
 from kadmon.tools.parallel import ParallelDispatchTool
 
 from kadmon.providers.base import LLMProvider
@@ -27,7 +28,9 @@ def create_default_registry(repo_root: str, db: SymbolDB | None = None, provider
     registry.register(ListDirTool(repo_root))
     registry.register(GrepSearchTool(repo_root))
     registry.register(ShellTool(repo_root))
-    registry.register(SubmitTool(repo_root))
+    verify_tool = VerifyTool(repo_root)
+    registry.register(verify_tool)
+    registry.register(SubmitTool(repo_root, verify_tool=verify_tool))
     registry.register(FileSkeletonTool(repo_root))
     registry.register(CheckpointRollbackTool(checkpoint_mgr))
     if db:

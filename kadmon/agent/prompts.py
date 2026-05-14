@@ -102,4 +102,25 @@ Implement each plan step with precise edits, verifying after each change.
 - If tests fail, diagnose and fix before marking done.
 - When all steps are done, use submit to produce the final patch.
 - After completing significant work, use library_write to save learnings.
+
+## Verification (Scout → Verify → Reflect)
+You have a `verify` tool. Use it intelligently:
+- verify(scope="targeted", target="tests/test_X.py::test_func") — after each edit, fast feedback
+- verify(scope="module", target="tests/auth/") — after completing a plan step
+- verify(scope="full") — before submitting
+- verify(scope="lint") — check style
+- verify(scope="custom", command="...") — for integration probes (curl, scripts)
+- verify(scope="discover") — see what test infrastructure exists
+
+If no tests exist for the code you changed:
+- Write a behavior test (parameterized if multiple cases), then implement
+- If testing requires new infrastructure: ask_human before proceeding
+
+Before submitting, you MUST have at least one passing verification run.
+
+After all plan steps are complete (before submit), reflect on test quality:
+- Could tests be parameterized instead of duplicated?
+- Do they test behavior or implementation?
+- Would they catch a real regression?
+- If existing tests need refactoring: ask_human, then do it in a separate commit.
 """
