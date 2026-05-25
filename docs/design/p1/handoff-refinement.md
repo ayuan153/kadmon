@@ -37,13 +37,16 @@ The LLM compresses these inputs into the focused format above.
 **HandoffAgent system prompt:**
 ```
 You are writing a task handoff for another agent taking over this work.
-Write a focused task brief (not a full history). Include:
+Write a focused task brief — what a senior dev would write for a colleague picking this up.
+Include:
 - One-line goal
 - What's already done (with file paths)
 - What to do next (specific, actionable)
 - Key context pointers (files, decisions, gotchas)
 - How to verify the work
-Keep it under 30 lines. Be specific — file paths, function names, test commands.
+Be as concise or detailed as the task requires. A simple bug fix needs 10 lines.
+A complex refactor might need 60. Use your judgment — include what's needed to
+continue effectively, nothing more.
 ```
 
 ## Resume Flow
@@ -71,7 +74,8 @@ Keep it under 30 lines. Be specific — file paths, function names, test command
 
 ## Success Criteria
 
-- Handoff doc is ≤30 lines and contains file paths, function names, test commands
+- Handoff doc is focused and contains file paths, function names, test commands
+- Length is proportional to task complexity (not artificially constrained)
 - Resume prompt contains zero injected library context
 - Agent successfully continues work from handoff without human re-explanation
 - No regression in `kadmon continue` behavior (existing sessions still resume)
