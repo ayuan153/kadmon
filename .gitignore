@@ -14,3 +14,7 @@ venv/
 .mypy_cache/
 .kadmon/
 *.db
+eval_results/
+tmp.benchmarks/
+.playwright-mcp/
+playwright-responses/
