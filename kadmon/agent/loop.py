@@ -68,7 +68,7 @@ class AgentLoop:
 
             self._handoff_monitor = HandoffMonitor()
             self._handoff_manager = HandoffManager(
-                repo_root=repo_root, librarian=librarian, session_tracker=session_tracker
+                repo_root=repo_root, librarian=librarian, session_tracker=session_tracker, provider=provider
             )
         # Register plan tool
         self._plan_tool = PlanTool()

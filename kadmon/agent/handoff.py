@@ -64,10 +64,11 @@ class HandoffMonitor:
 class HandoffManager:
     """Orchestrates the handoff: save state, craft doc, reset context, resume."""
 
-    def __init__(self, repo_root: str, librarian=None, session_tracker=None):
+    def __init__(self, repo_root: str, librarian=None, session_tracker=None, provider=None):
         self.repo_root = repo_root
         self.librarian = librarian
         self.session_tracker = session_tracker
+        self._provider = provider
         self.handoffs_dir = Path(repo_root) / ".kadmon" / "handoffs"
         self.handoffs_dir.mkdir(parents=True, exist_ok=True)
         (self.handoffs_dir / "history").mkdir(exist_ok=True)
@@ -101,30 +102,26 @@ class HandoffManager:
         context.messages.clear()
         context._token_estimate = 0
 
-        # 6. Build fresh context from library + handoff
-        cold_start = ""
-        if self.librarian:
-            cold_start = self.librarian.get_cold_start_context()
-
-        resume_prompt = self._build_resume_prompt(cold_start, handoff_doc)
+        # 6. Build resume prompt (handoff doc only — no blob injection)
+        resume_prompt = self._build_resume_prompt("", handoff_doc)
         return resume_prompt
 
     def _craft_handoff(self, plan: Plan | None, trigger: HandoffTrigger, pruner=None) -> str:
-        """Generate the handoff document."""
-        timestamp = time.strftime("%Y-%m-%d %H:%M")
-        sections = [
-            f"# Handoff — {timestamp}",
-            f"\nReason: {trigger.reason} ({trigger.details})",
-        ]
+        """Generate the handoff document via HandoffAgent or fallback."""
+        if self._provider and plan:
+            from kadmon.memory.agents.handoff_agent import HandoffAgent
+            from kadmon.memory.session_log import SessionLogger
 
-        if plan and pruner:
-            # Use pruner for concise, relevant summary
-            pruned = pruner.prune_for_handoff(plan)
-            if pruned:
-                sections.append(f"\n## Context\n\n{pruned}")
-            sections.append(f"\n## Goal\n\n{plan.goal}")
-        elif plan:
-            # Accomplished
+            agent = HandoffAgent(self._provider)
+            completed = [s.description + (f" ({s.notes})" if s.notes else "") for s in plan.steps if s.status == StepStatus.DONE]
+            pending = [s.description for s in plan.steps if s.status in (StepStatus.PENDING, StepStatus.ACTIVE)]
+            session_events = SessionLogger(self.repo_root).read_events()
+            return agent.synthesize(plan.goal, completed, pending, session_events)
+
+        # Fallback: mechanical format (no provider available)
+        timestamp = time.strftime("%Y-%m-%d %H:%M")
+        sections = [f"# Handoff — {timestamp}", f"\nReason: {trigger.reason} ({trigger.details})"]
+        if plan:
             done = [s for s in plan.steps if s.status == StepStatus.DONE]
             if done:
                 sections.append("\n## Accomplished")
@@ -132,25 +129,19 @@ class HandoffManager:
                     sections.append(f"- {s.description}")
                     if s.notes:
                         sections.append(f"  Note: {s.notes}")
-
-            # In progress
             active = [s for s in plan.steps if s.status == StepStatus.ACTIVE]
             if active:
                 sections.append("\n## In Progress")
                 for s in active:
                     sections.append(f"- {s.description}")
-
-            # Remaining
             pending = [s for s in plan.steps if s.status == StepStatus.PENDING]
             if pending:
                 sections.append("\n## Remaining Plan")
                 for s in pending:
-                    sections.append(f"- [ ] {s.description}")
-
+                    sections.append(f"- {s.description}")
             sections.append(f"\n## Goal\n\n{plan.goal}")
         else:
             sections.append("\n## Note\n\nNo structured plan was active at handoff time.")
-
         return "\n".join(sections)
 
     def _save_handoff(self, handoff_doc: str):
@@ -163,13 +154,10 @@ class HandoffManager:
 
     def _build_resume_prompt(self, cold_start: str, handoff_doc: str) -> str:
         """Build the prompt that starts the fresh context."""
-        parts = []
-        if cold_start:
-            parts.append(cold_start)
-        parts.append("# Handoff Context\n\n" + handoff_doc)
-        parts.append(
-            "\nYou are resuming work after a context handoff. "
-            "Continue from where the previous session left off. "
-            "Focus on the remaining plan steps."
+        return (
+            handoff_doc + "\n\n---\n\n"
+            "You are resuming work after a context handoff. "
+            "The above is your task brief. Continue from where the previous session left off. "
+            "Use library_read if you need project background. Use verify to check your work."
         )
-        return "\n\n---\n\n".join(parts)
+
