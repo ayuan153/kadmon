@@ -18,3 +18,4 @@ eval_results/
 tmp.benchmarks/
 .playwright-mcp/
 playwright-responses/
+.omc/
