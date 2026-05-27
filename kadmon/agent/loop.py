@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from kadmon.providers.base import LLMProvider, Message
@@ -92,6 +93,9 @@ class AgentLoop:
         if self.librarian:
             self._ingest_agents_md()
 
+        # Session resumption: check for recent handoff
+        task = self._maybe_resume_from_handoff(task)
+
         # Start session tracking
         if self.session_tracker:
             self.session_tracker.start(task)
@@ -100,6 +104,31 @@ class AgentLoop:
         if self.use_planning:
             return self._run_with_planning(task)
         return self._run_simple(task)
+
+    def _maybe_resume_from_handoff(self, task: str) -> str:
+        """If a recent handoff exists and user prompt is low-detail, prepend context."""
+        import time
+        handoff_path = Path(self._repo_root) / "docs" / "handoffs" / "latest.md"
+        if not handoff_path.exists():
+            return task
+
+        # Stale check: ignore handoffs older than 2 weeks
+        age_days = (time.time() - handoff_path.stat().st_mtime) / 86400
+        if age_days > 14:
+            return task
+
+        # High-detail prompt = user knows what they want, skip resumption
+        # Heuristic: >50 chars or >8 words = high-detail
+        words = task.split()
+        if len(task) > 50 or len(words) > 8:
+            return task
+
+        # Low-detail prompt: prepend handoff context
+        handoff_content = handoff_path.read_text().strip()
+        return (
+            f"[Previous session context]\n{handoff_content}\n\n---\n\n"
+            f"[User request]\n{task}"
+        )
 
     def continue_with(self, task: str) -> str:
         """Continue an existing session with a new user message. No cold-start logic."""

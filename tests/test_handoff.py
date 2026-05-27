@@ -34,10 +34,12 @@ def test_monitor_task_boundary():
         PlanStep(id="2", description="s2", status=StepStatus.DONE),
     ])
     ctx = ContextManager(max_tokens=1000)
+    # Clean break requires substantial context (>40% utilization)
+    ctx._token_estimate = 450  # 45% utilization
     monitor = HandoffMonitor()
     trigger = monitor.check(ctx, plan)
     assert trigger is not None
-    assert trigger.reason == "task_boundary"
+    assert trigger.reason == "clean_break"
 
 
 def test_monitor_quality_degradation():
@@ -103,11 +105,9 @@ def test_execute_resets_context(tmp_path):
 def test_execute_saves_files(tmp_path):
     ctx = ContextManager(max_tokens=1000)
     mgr = HandoffManager(repo_root=str(tmp_path))
-    trigger = HandoffTrigger(reason="task_boundary", details="done")
+    trigger = HandoffTrigger(reason="clean_break", details="done")
     mgr.execute(ctx, None, trigger)
-    assert (tmp_path / ".kadmon" / "handoffs" / "latest.md").exists()
-    history = list((tmp_path / ".kadmon" / "handoffs" / "history").iterdir())
-    assert len(history) == 1
+    assert (tmp_path / "docs" / "handoffs" / "latest.md").exists()
 
 
 def test_execute_marks_session_handed_off(tmp_path):

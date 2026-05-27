@@ -37,11 +37,13 @@ class HandoffMonitor:
                 details=f"Context at {context.utilization:.0%} capacity",
             )
 
-        # 2. Task boundary: current plan is complete
-        if plan and plan.is_complete():
+        # 2. Clean break: plan complete + context is substantial (not a trivial task)
+        # Only triggers when there's been meaningful work (context > 40% used),
+        # indicating the agent should offer a handoff rather than continuing to accumulate.
+        if plan and plan.is_complete() and context.utilization > 0.4:
             return HandoffTrigger(
-                reason="task_boundary",
-                details="Current plan completed",
+                reason="clean_break",
+                details="Plan completed with substantial context — natural handoff point",
             )
 
         # 3. Quality degradation: too many loop recoveries
@@ -69,9 +71,8 @@ class HandoffManager:
         self.librarian = librarian
         self.session_tracker = session_tracker
         self._provider = provider
-        self.handoffs_dir = Path(repo_root) / ".kadmon" / "handoffs"
+        self.handoffs_dir = Path(repo_root) / "docs" / "handoffs"
         self.handoffs_dir.mkdir(parents=True, exist_ok=True)
-        (self.handoffs_dir / "history").mkdir(exist_ok=True)
 
     def execute(self, context: ContextManager, plan: Plan | None, trigger: HandoffTrigger) -> str:
         """Execute a handoff. Returns the handoff document to inject into fresh context."""
@@ -145,12 +146,9 @@ class HandoffManager:
         return "\n".join(sections)
 
     def _save_handoff(self, handoff_doc: str):
-        """Save handoff to latest.md and history/."""
-        # Save as latest
+        """Save handoff to docs/handoffs/latest.md (committed, not gitignored)."""
+        self.handoffs_dir.mkdir(parents=True, exist_ok=True)
         (self.handoffs_dir / "latest.md").write_text(handoff_doc)
-        # Save to history
-        timestamp = time.strftime("%Y-%m-%dT%H-%M-%S")
-        (self.handoffs_dir / "history" / f"{timestamp}.md").write_text(handoff_doc)
 
     def _build_resume_prompt(self, cold_start: str, handoff_doc: str) -> str:
         """Build the prompt that starts the fresh context."""
