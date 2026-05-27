@@ -19,3 +19,5 @@ tmp.benchmarks/
 .playwright-mcp/
 playwright-responses/
 .omc/
+npm/lib/
+npm/.venv/

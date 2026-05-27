@@ -3,6 +3,7 @@ from pathlib import Path
 
 import click
 
+from kadmon import __version__
 from kadmon.config import DEFAULT_MODEL, DEFAULT_PROVIDER, DEFAULT_REGION
 
 
@@ -39,7 +40,7 @@ def _make_provider(provider: str, model: str, aws_region: str):
 
 
 @click.group(invoke_without_command=True)
-@click.version_option(package_name="kadmon")
+@click.version_option(version=__version__)
 @click.pass_context
 def main(ctx):
     """Kadmon - an LLM coding agent."""

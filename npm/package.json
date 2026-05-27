@@ -1,6 +1,6 @@
 {
   "name": "kadmon",
-  "version": "0.1.0",
+  "version": "0.6.1",
   "description": "An autonomous coding agent that manages its own context across sessions",
   "bin": {
     "kadmon": "./bin/kadmon.mjs"
@@ -17,6 +17,8 @@
   },
   "files": [
     "bin/",
+    "lib/",
+    "requirements.txt",
     "README.md",
     "LICENSE"
   ]
