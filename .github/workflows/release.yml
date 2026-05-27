@@ -36,6 +36,7 @@ jobs:
           npm version $VERSION --no-git-tag-version
       - name: Bundle Python source
         run: |
+          mkdir -p npm/lib
           cp -r kadmon/ npm/lib/kadmon/
       - name: Publish with provenance
         run: cd npm && npm publish --provenance --access public
