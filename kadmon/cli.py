@@ -39,6 +39,7 @@ def _make_provider(provider: str, model: str, aws_region: str):
 
 
 @click.group(invoke_without_command=True)
+@click.version_option(package_name="kadmon")
 @click.pass_context
 def main(ctx):
     """Kadmon - an LLM coding agent."""
