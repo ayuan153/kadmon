@@ -78,22 +78,27 @@ def chat(model, provider, aws_region):
     conv_history = ConversationHistory(repo_path)
 
     task = ""
+    agent = AgentLoop(
+        provider=llm,
+        tools=tools,
+        librarian=librarian,
+        session_tracker=session_tracker,
+        channel=channel,
+        repo_root=repo_path,
+        display=display,
+    )
+    first_prompt = True
     try:
         while True:
             task = input("> ").strip()
             if not task:
                 continue
             conv_history.snapshot(task, [], None)
-            agent = AgentLoop(
-                provider=llm,
-                tools=tools,
-                librarian=librarian,
-                session_tracker=session_tracker,
-                channel=channel,
-                repo_root=repo_path,
-                display=display,
-            )
-            result = agent.run(task)
+            if first_prompt:
+                result = agent.run(task)
+                first_prompt = False
+            else:
+                result = agent.continue_with(task)
             if result:
                 click.echo("")
             else:

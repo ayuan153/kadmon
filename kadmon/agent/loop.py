@@ -101,6 +101,25 @@ class AgentLoop:
             return self._run_with_planning(task)
         return self._run_simple(task)
 
+    def continue_with(self, task: str) -> str:
+        """Continue an existing session with a new user message. No cold-start logic."""
+        self._session_logger.session_start(task)
+        self.context.add(Message(role="user", content=task))
+        # Reset plan for new task within same session
+        self._plan_tool._plan = None
+
+        for _ in range(self.max_iterations):
+            response = self._call_llm(
+                tools=self.tools.definitions(),
+                system=SYSTEM_PROMPT,
+            )
+            done = self._process_response(response)
+            if done:
+                return done
+
+        self._session_logger.session_end("max_iterations")
+        return ""
+
     def _run_with_planning(self, task: str) -> str:
         """Two-phase: architect explores and plans, editor executes."""
         # Phase 1: Architect

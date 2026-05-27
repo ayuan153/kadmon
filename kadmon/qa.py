@@ -67,6 +67,32 @@ class QARunner:
             if "lint:" in content or "lint :" in content:
                 profile["commands"].setdefault("lint", "make lint")
 
+        # Go
+        if (self._root / "go.mod").exists():
+            profile["framework"] = profile["framework"] or "go"
+            profile["commands"].setdefault("unit", "go test ./...")
+            profile["commands"].setdefault("targeted", "go test {target}")
+            profile["commands"].setdefault("full", "go test ./...")
+            profile["commands"].setdefault("lint", "go vet ./...")
+
+        # Java: Gradle
+        if (self._root / "build.gradle").exists() or (self._root / "build.gradle.kts").exists():
+            profile["framework"] = profile["framework"] or "gradle"
+            profile["commands"].setdefault("unit", "./gradlew test")
+            profile["commands"].setdefault("full", "./gradlew test")
+            profile["commands"].setdefault("lint", "./gradlew check")
+
+        # Java: Maven
+        if (self._root / "pom.xml").exists():
+            profile["framework"] = profile["framework"] or "maven"
+            profile["commands"].setdefault("unit", "mvn test -q")
+            profile["commands"].setdefault("full", "mvn test -q")
+
+        # TypeScript
+        tsconfig = self._root / "tsconfig.json"
+        if tsconfig.exists():
+            profile["commands"].setdefault("lint", "npx tsc --noEmit")
+
         return profile
 
     def run_targeted(self, target: str) -> QAResult:
