@@ -1,6 +1,16 @@
 # Kadmon
 
-YOLO mode you can trust. An autonomous coding agent that asks the right questions, proves its work, and manages its own context across sessions.
+**YOLO mode you can trust.** An autonomous coding agent that manages its own context, asks the right questions, and proves its work.
+
+## Why Kadmon exists
+
+Current AI coding agents get context management wrong. They run until the context window fills up, then try to recover with compaction — lossy summarization that throws away critical information mid-task. Human-in-the-loop checks are aimed at the wrong level: agents ask for permission on mechanics (file edits, shell commands) when what they should be probing for is *directional* feedback.
+
+Kadmon is built on a different philosophy:
+
+- **Minimize token usage from the start.** Delegate specialized subtasks to focused subagents with scoped context instead of stuffing everything into one session. Use persistent memory across sessions, not just within them.
+- **Hand off context gracefully.** As a session grows, Kadmon plans handoff points — packaging completed work, decisions made, and open questions into a clean context for the next phase. No lossy compaction.
+- **Go fast on mechanics, go slow on direction.** Kadmon doesn't ask "can I edit this file?" It asks "we could approach this as a refactor or a rewrite — here's the tradeoff, which direction do you want?" Agents should automate execution and surface strategic decisions.
 
 ## Install
 
