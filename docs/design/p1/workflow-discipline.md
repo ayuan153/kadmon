@@ -139,3 +139,34 @@ When kadmon starts and a previous handoff exists:
 4. Agent offers handoff at natural stopping points
 5. A fresh agent with the handoff doc can continue work without re-explanation
 6. User never has to prompt "ask me any open questions" — agent does it by default
+
+## Learnings from Practice
+
+Observations from using this workflow in a real multi-session development cycle:
+
+### 1. Design iteration is multi-turn, not one-shot
+
+The agent should NOT write a design doc and immediately implement. The pattern is:
+- Write design → present to user → get feedback → revise → sometimes revise again → THEN implement
+
+**Rule:** After writing a design/plan, WAIT for explicit confirmation ("proceed", "lgtm", "go ahead") before starting implementation. "Proceed" is the implementation trigger.
+
+### 2. Handoff docs live in `docs/handoffs/` (committed, not gitignored)
+
+`.kadmon/` is gitignored (session state, symbols.db, checkpoints = ephemeral noise). But handoff docs are the persistence mechanism — they must survive across machines and clones.
+
+**Rule:** Handoff docs go in `docs/handoffs/latest.md` (committed to git). Ephemeral state stays in `.kadmon/` (gitignored).
+
+### 3. Publish/ship is always user-triggered
+
+The agent batches work and waits for the user to say "publish" or "ship it." Never auto-publish.
+
+### 4. Open questions work best as a continuous habit
+
+Not "ask everything upfront" — surface ambiguities as they arise during execution. Every response where the agent has uncertainty should end with open questions. This catches design issues early when they're cheap to fix.
+
+### 5. The handoff doc is NOT the design doc
+
+- Design docs capture the WHAT and WHY (architecture, decisions, rationale)
+- Handoff docs capture the WHERE and NEXT (pointers, state, immediate next steps)
+- A good handoff references design docs rather than duplicating their content
