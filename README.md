@@ -29,7 +29,7 @@ pip install kadmon
 kadmon init
 ```
 
-This walks you through provider setup interactively. Then:
+This walks you through provider setup once (globally — not per-project). Then in any project:
 
 ```bash
 cd your-project
@@ -37,6 +37,17 @@ kadmon
 ```
 
 Type your task, kadmon works, streams output as it goes. Ctrl+C to exit.
+
+### Updating
+
+```bash
+pip install --upgrade kadmon
+```
+
+Or with npm:
+```bash
+npm update -g kadmon
+```
 
 ### Provider Setup (manual alternative to `kadmon init`)
 
@@ -65,7 +76,7 @@ export AWS_REGION=us-east-1
 kadmon --provider bedrock
 ```
 
-Config is saved to `.kadmon/config.toml` after `kadmon init` — you only set this up once per project.
+Config is saved to `.kadmon/config.toml` after `kadmon init` — you only set this up once.
 
 ## What Makes Kadmon Different
 
